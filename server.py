@@ -11,6 +11,7 @@
 
 # import the various libraries needed
 import http.cookies as Cookie  # some cookie handling support
+import string
 from http.server import BaseHTTPRequestHandler, HTTPServer  # the heavy lifting of the web server
 import urllib  # some url parsing support
 import json  # support for json encoding
@@ -37,7 +38,7 @@ def do_database_execute(op):
     """Execute an sqlite3 SQL query to database.db that does not expect a response."""
     print(op)
     try:
-        db = sqlite3.connect('database.db')
+        db = sqlite3.connect('db/database.db')
         cursor = db.cursor()
         cursor.execute(*op)
         db.commit()
@@ -51,7 +52,7 @@ def do_database_fetchone(op):
     """Execute an sqlite3 SQL query to database.db that expects to extract a single row result. Note, it may be a null result."""
     print(op)
     try:
-        db = sqlite3.connect('database.db')
+        db = sqlite3.connect('db/database.db')
         cursor = db.cursor()
         cursor.execute(op)
         result = cursor.fetchone()
@@ -67,7 +68,7 @@ def do_database_fetchall(op):
     """Execute an sqlite3 SQL query to database.db that expects to extract a multi-row result. Note, it may be a null result."""
     print(op)
     try:
-        db = sqlite3.connect('database.db')
+        db = sqlite3.connect('db/database.db')
         cursor = db.cursor()
         cursor.execute(op)
         result = cursor.fetchall()
@@ -113,6 +114,56 @@ def build_response_redirect(where):
 
 # The following handle_..._request functions are invoked by the corresponding /action?command=.. request
 
+def check_username_in_database(username):
+    print(username)
+    try:
+        db = sqlite3.connect('db/database.db')
+        cursor = db.cursor()
+        cursor.execute('SELECT COUNT(*) FROM users WHERE username = ?', (username,))
+        result = cursor.fetchone()[0]
+        out = result > 0
+        db.close()
+        return out
+    except Exception as e:
+        print(e)
+        return None
+
+def check_password_for_username(username, password):
+    try:
+        db = sqlite3.connect('db/database.db')
+        cursor = db.cursor()
+        cursor.execute('SELECT password FROM users WHERE username = ?', (username,))
+        result = cursor.fetchone()
+        if result:
+            out = result[0] == password
+            db.close()
+            return out
+        else:
+            db.close()
+            return None
+    except Exception as e:
+        print(e)
+        return None
+
+def if_loggedin_logout_not_create_session(username, magic_input):
+    try:
+        db = sqlite3.connect('db/database.db')
+        cursor = db.cursor()
+        cursor.execute('SELECT COUNT(*) FROM session WHERE userid = ?', (username,))
+        magic = cursor.fetchone()
+        if magic:
+            handle_logout_request(username, magic, ['new logic request'])
+            cursor.execute('DELETE FROM session WHERE userid = ?', (username,))
+            db.commit()
+            db.close()
+        else:
+            cursor.execute('INSERT INTO session (userid, magic) VALUES (?,  ?)', (username,  magic_input))
+            db.commit()
+            db.close()
+    except Exception as e:
+        print(e)
+
+
 def handle_login_request(iuser, imagic, content):
     """A user has supplied a username and password. Check if these are
        valid and if so, create a suitable session record in the database
@@ -120,13 +171,28 @@ def handle_login_request(iuser, imagic, content):
        Return the username, magic identifier and the response action set."""
     # content contains the username and password
     # imagic and iuser are empty on input
-    rows = do_database_fetchone('SELECT username FROM users')
-    print(rows)
 
+    iuser = content['username']
+    password = content['password']
     response = []
+    print(response)
 
-## Add code here
+    if not iuser:
+        response.append(build_response_message(100, 'Please provide a username.'))
+        return [iuser, imagic, response]
+    if not password:
+        response.append(build_response_message(101, 'Please provide a password.'))
+        return [iuser, imagic, response]
+    if not check_username_in_database(iuser):
+        response.append(build_response_message(200, 'Username: ' + iuser + ' does not exist.'))
+        return [iuser, imagic, response]
+    if not check_password_for_username(iuser, password):
+        response.append(build_response_message(201,'Incorrect password.'))
+        return [iuser, imagic, response]
 
+    imagic = random_digits(10)
+    if_loggedin_logout_not_create_session(iuser, imagic)
+    response.append(0)
     return [iuser, imagic, response]
 
 
@@ -442,10 +508,12 @@ def run():
     print('running server on port =', sys.argv[1], '...')
     httpd.serve_forever()  # This function will not return till the server is aborted
 
-do_database_execute('INSERT INTO users (userid, fullname, username, password) VALUES '
-                    '(1,"fares ansara", "3ans02", "password"), '
-                    '(2,"kareem sabanekh", "spinach02", "password"),'
-                    '(3,"laila badaro", "badaro03", "password")')
+
+# do_database_execute('INSERT INTO users (userid, fullname, username, password) VALUES '
+#                     '(1,"fares ansara", "3ans02", "password"), '
+#                     '(2,"kareem sabanekh", "spinach02", "password"),'
+#                     '(3,"laila badaro", "badaro03", "password")')
+
 
 run()
 
