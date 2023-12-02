@@ -446,8 +446,8 @@
     </routine>
     <schema id="177" parent="1" name="main">
       <Current>1</Current>
-      <IntrospectionTimestamp>2023-12-02.14:19:29.334</IntrospectionTimestamp>
-      <LocalIntrospectionTimestamp>2023-12-02.14:19:29</LocalIntrospectionTimestamp>
+      <IntrospectionTimestamp>2023-12-02.20:15:37.870</IntrospectionTimestamp>
+      <LocalIntrospectionTimestamp>2023-12-02.20:15:37</LocalIntrospectionTimestamp>
     </schema>
     <argument id="178" parent="16">
       <ArgumentDirection>R</ArgumentDirection>
@@ -1471,187 +1471,166 @@
     </argument>
     <table id="518" parent="177" name="attendee"/>
     <table id="519" parent="177" name="class"/>
-    <table id="520" parent="177" name="get_skills_user"/>
-    <table id="521" parent="177" name="session"/>
-    <table id="522" parent="177" name="skill"/>
-    <table id="523" parent="177" name="sqlite_master">
+    <table id="520" parent="177" name="session"/>
+    <table id="521" parent="177" name="skill"/>
+    <table id="522" parent="177" name="sqlite_master">
       <System>1</System>
     </table>
-    <table id="524" parent="177" name="sqlite_sequence">
+    <table id="523" parent="177" name="sqlite_sequence">
       <System>1</System>
     </table>
-    <table id="525" parent="177" name="trainer"/>
-    <table id="526" parent="177" name="users"/>
-    <column id="527" parent="518" name="attendeeid">
+    <table id="524" parent="177" name="trainer"/>
+    <table id="525" parent="177" name="users"/>
+    <column id="526" parent="518" name="attendeeid">
       <AutoIncrement>1</AutoIncrement>
       <DasType>INTEGER|0s</DasType>
       <NotNull>1</NotNull>
       <Position>1</Position>
     </column>
-    <column id="528" parent="518" name="userid">
+    <column id="527" parent="518" name="userid">
       <DasType>INTEGER|0s</DasType>
       <NotNull>1</NotNull>
       <Position>2</Position>
     </column>
-    <column id="529" parent="518" name="classid">
+    <column id="528" parent="518" name="classid">
       <DasType>INTEGER|0s</DasType>
       <NotNull>1</NotNull>
       <Position>3</Position>
     </column>
-    <column id="530" parent="518" name="status">
+    <column id="529" parent="518" name="status">
       <DasType>INTEGER|0s</DasType>
       <Position>4</Position>
     </column>
-    <key id="531" parent="518">
+    <key id="530" parent="518">
       <ColNames>attendeeid</ColNames>
       <Primary>1</Primary>
     </key>
-    <column id="532" parent="519" name="classid">
+    <column id="531" parent="519" name="classid">
       <AutoIncrement>1</AutoIncrement>
       <DasType>INTEGER|0s</DasType>
       <NotNull>1</NotNull>
       <Position>1</Position>
     </column>
-    <column id="533" parent="519" name="trainerid">
+    <column id="532" parent="519" name="trainerid">
       <DasType>INTEGER|0s</DasType>
       <NotNull>1</NotNull>
       <Position>2</Position>
     </column>
-    <column id="534" parent="519" name="skillid">
+    <column id="533" parent="519" name="skillid">
       <DasType>INTEGER|0s</DasType>
       <NotNull>1</NotNull>
       <Position>3</Position>
     </column>
-    <column id="535" parent="519" name="start">
+    <column id="534" parent="519" name="start">
       <DasType>INTEGER|0s</DasType>
       <NotNull>1</NotNull>
       <Position>4</Position>
     </column>
-    <column id="536" parent="519" name="max">
+    <column id="535" parent="519" name="max">
       <DasType>INTEGER|0s</DasType>
       <NotNull>1</NotNull>
       <Position>5</Position>
     </column>
-    <column id="537" parent="519" name="note">
+    <column id="536" parent="519" name="note">
       <DasType>TEXT|0s</DasType>
       <Position>6</Position>
     </column>
-    <key id="538" parent="519">
+    <key id="537" parent="519">
       <ColNames>classid</ColNames>
       <Primary>1</Primary>
     </key>
-    <column id="539" parent="520" name="skillid">
-      <DasType>INT|0s</DasType>
-      <Position>1</Position>
-    </column>
-    <column id="540" parent="520" name="skill_name">
-      <DasType>VARCHAR(255)|0s</DasType>
-      <Position>2</Position>
-    </column>
-    <column id="541" parent="520" name="trainer">
-      <DasType>VARCHAR(255)|0s</DasType>
-      <Position>3</Position>
-    </column>
-    <column id="542" parent="520" name="gained">
-      <DasType>INT|0s</DasType>
-      <Position>4</Position>
-    </column>
-    <column id="543" parent="520" name="state">
-      <DasType>VARCHAR(255)|0s</DasType>
-      <Position>5</Position>
-    </column>
-    <column id="544" parent="521" name="sessionid">
+    <column id="538" parent="520" name="sessionid">
       <AutoIncrement>1</AutoIncrement>
       <DasType>INTEGER|0s</DasType>
       <NotNull>1</NotNull>
       <Position>1</Position>
     </column>
-    <column id="545" parent="521" name="userid">
+    <column id="539" parent="520" name="userid">
       <DasType>INTEGER|0s</DasType>
       <NotNull>1</NotNull>
       <Position>2</Position>
     </column>
-    <column id="546" parent="521" name="magic">
+    <column id="540" parent="520" name="magic">
       <DasType>TEXT|0s</DasType>
       <NotNull>1</NotNull>
       <Position>3</Position>
     </column>
-    <key id="547" parent="521">
+    <key id="541" parent="520">
       <ColNames>sessionid</ColNames>
       <Primary>1</Primary>
     </key>
-    <column id="548" parent="522" name="skillid">
+    <column id="542" parent="521" name="skillid">
       <AutoIncrement>1</AutoIncrement>
       <DasType>INTEGER|0s</DasType>
       <NotNull>1</NotNull>
       <Position>1</Position>
     </column>
-    <column id="549" parent="522" name="name">
+    <column id="543" parent="521" name="name">
       <DasType>TEXT|0s</DasType>
       <NotNull>1</NotNull>
       <Position>2</Position>
     </column>
-    <key id="550" parent="522">
+    <key id="544" parent="521">
       <ColNames>skillid</ColNames>
       <Primary>1</Primary>
     </key>
-    <column id="551" parent="523" name="type">
+    <column id="545" parent="522" name="type">
       <DasType>TEXT|0s</DasType>
       <Position>1</Position>
     </column>
-    <column id="552" parent="523" name="name">
+    <column id="546" parent="522" name="name">
       <DasType>TEXT|0s</DasType>
       <Position>2</Position>
     </column>
-    <column id="553" parent="523" name="tbl_name">
+    <column id="547" parent="522" name="tbl_name">
       <DasType>TEXT|0s</DasType>
       <Position>3</Position>
     </column>
-    <column id="554" parent="523" name="rootpage">
+    <column id="548" parent="522" name="rootpage">
       <DasType>INT|0s</DasType>
       <Position>4</Position>
     </column>
-    <column id="555" parent="523" name="sql">
+    <column id="549" parent="522" name="sql">
       <DasType>TEXT|0s</DasType>
       <Position>5</Position>
     </column>
-    <column id="556" parent="524" name="name">
+    <column id="550" parent="523" name="name">
       <Position>1</Position>
     </column>
-    <column id="557" parent="524" name="seq">
+    <column id="551" parent="523" name="seq">
       <Position>2</Position>
     </column>
-    <column id="558" parent="525" name="trainerid">
+    <column id="552" parent="524" name="trainerid">
       <DasType>INTEGER|0s</DasType>
       <NotNull>1</NotNull>
       <Position>1</Position>
     </column>
-    <column id="559" parent="525" name="skillid">
+    <column id="553" parent="524" name="skillid">
       <DasType>INTEGER|0s</DasType>
       <Position>2</Position>
     </column>
-    <column id="560" parent="526" name="userid">
+    <column id="554" parent="525" name="userid">
       <AutoIncrement>1</AutoIncrement>
       <DasType>INTEGER|0s</DasType>
       <NotNull>1</NotNull>
       <Position>1</Position>
     </column>
-    <column id="561" parent="526" name="fullname">
+    <column id="555" parent="525" name="fullname">
       <DasType>TEXT|0s</DasType>
       <NotNull>1</NotNull>
       <Position>2</Position>
     </column>
-    <column id="562" parent="526" name="username">
+    <column id="556" parent="525" name="username">
       <DasType>TEXT|0s</DasType>
       <NotNull>1</NotNull>
       <Position>3</Position>
     </column>
-    <column id="563" parent="526" name="password">
+    <column id="557" parent="525" name="password">
       <DasType>TEXT|0s</DasType>
       <NotNull>1</NotNull>
       <Position>4</Position>
     </column>
-    <key id="564" parent="526">
+    <key id="558" parent="525">
       <ColNames>userid</ColNames>
       <Primary>1</Primary>
     </key>
