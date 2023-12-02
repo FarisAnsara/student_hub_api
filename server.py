@@ -17,6 +17,7 @@ import urllib  # some url parsing support
 import json  # support for json encoding
 import sys  # needed for agument handling
 import time  # time support
+import pytz
 
 import base64  # some encoding support
 import sqlite3  # sql database
@@ -26,6 +27,7 @@ import datetime
 
 import numpy
 import numpy as np
+
 
 def random_digits(n):
     """This function provides a random integer with the specfied number of digits and no leading zeros."""
@@ -113,16 +115,21 @@ def build_response_redirect(where):
        If this action is used, it should be the only response provided."""
     return {"type": "redirect", "where": where}
 
+
 def check_if_session_invalid(imagic, iuser):
+    # Todo: check this function working
     return do_database_fetchone(f'SELECT magic FROM session WHERE userid = {iuser}')[0] == imagic
+
 
 def check_username_in_database(username):
     res = do_database_fetchone(f'SELECT * FROM users WHERE username = "{username}"')
     return bool(res)
 
+
 def check_password_for_username(username, password):
     res = do_database_fetchone(f'SELECT password FROM users WHERE username = "{username}"')[0]
     return res == password
+
 
 # The following handle_..._request functions are invoked by the corresponding /action?command=.. request
 def handle_login_request(iuser, imagic, content):
@@ -153,6 +160,7 @@ def handle_login_request(iuser, imagic, content):
     response.append({"type": "redirect", "where": "\index.html"})
     return [iuser, imagic, response]
 
+
 def handle_logout_request(iuser, imagic, parameters):
     """This code handles the selection of the logout button.
        You will     print(content)
@@ -167,32 +175,13 @@ def handle_logout_request(iuser, imagic, parameters):
     response.append({"type": "redirect", "where": "\logout.html"})
     return [iuser, imagic, response]
 
+
 def format_my_returns(tuple_in):
     out = []
     for val in tuple_in:
         out.append(val[0])
     return tuple(out)
 
-def get_skills_where_user_is_trainer_and_clean_array(my_skills, user_is_trainer):
-    for arr in user_is_trainer:
-        trainer_id = arr[0]
-        skill_id = arr[1]
-        skill_name = do_database_fetchone(f'SELECT name FROM skill WHERE skillid = {skill_id}')[0]
-        trainer_name = do_database_fetchone(f'SELECT fullname FROM users WHERE userid = {trainer_id}')[0]
-        gained = None
-        status = "trainer"
-        my_skills = numpy.append(my_skills, [[skill_id, skill_name, trainer_name, gained, status]], axis=0)
-    indices_to_delete = []
-    for i, row in enumerate(my_skills):
-        if row[4] in ["cancelled", "removed"]:
-            indices_to_delete.append(i)
-        elif row[4] == 'enrolled':
-            if int(row[3]) < int(time.time()):
-                my_skills[i][4] = "scheduled"
-            elif int(row[3]) >= int(time.time()):
-                my_skills[i][4] = "pending"
-    my_skills = np.delete(my_skills, indices_to_delete, axis=0)
-    return my_skills
 
 def get_states_of_users(statuses):
     states = []
@@ -212,6 +201,7 @@ def get_states_of_users(statuses):
                 states.append(None)
     return states
 
+
 def get_trainer_names(trainer_ids):
     if isinstance(trainer_ids, int):
         return do_database_fetchone(f'SELECT fullname FROM users WHERE userid = {trainer_ids}')[0]
@@ -221,6 +211,7 @@ def get_trainer_names(trainer_ids):
         if name:
             trainer_names.append(name[0])
     return trainer_names
+
 
 def get_skill_names(skill_ids):
     if isinstance(skill_ids, int):
@@ -232,7 +223,8 @@ def get_skill_names(skill_ids):
             skills.append(skill[0])
     return skills
 
-def get_skillids_trainerids_start(class_ids):
+
+def get_skillids_start_trainerids(class_ids):
     skill_ids = []
     trainer_ids = []
     start_dates = []
@@ -244,11 +236,13 @@ def get_skillids_trainerids_start(class_ids):
             start_dates.append(out[2])
     return skill_ids, start_dates, trainer_ids
 
-def get_my_skills_array(class_ids, statuses):
+
+def get_my_skills_array(iuser, class_ids, statuses):
     my_skills = []
 
-    skill_ids, start_dates, trainer_ids = get_skillids_trainerids_start(class_ids)
+    skill_ids, start_dates, trainer_ids = get_skillids_start_trainerids(class_ids)
     my_skills.append(skill_ids)
+    my_skills.append(trainer_ids)
 
     skills = get_skill_names(skill_ids)
     my_skills.append(skills)
@@ -262,11 +256,29 @@ def get_my_skills_array(class_ids, statuses):
     my_skills.append(states)
 
     my_skills = np.array(my_skills).transpose()
-    user_is_trainer = do_database_fetchall(f'SELECT trainerid, skillid FROM trainer WHERE trainerid = 1')
-
-    my_skills = get_skills_where_user_is_trainer_and_clean_array(my_skills, user_is_trainer)
-
+    user_is_trainer = do_database_fetchall(f'SELECT trainerid, skillid FROM trainer WHERE trainerid = {iuser}')
+    my_skills = get_user_is_trainer_and_clean_arr(my_skills, user_is_trainer)
     return my_skills
+
+
+def get_user_is_trainer_and_clean_arr(my_skills, user_is_trainer):
+    indices_to_delete = []
+    for i, row in enumerate(my_skills):
+        if row[5] in ["cancelled", "removed"]:
+            indices_to_delete.append(i)
+        elif row[5] == 'enrolled':
+            if int(row[4]) < int(time.time()):
+                my_skills[i][5] = "scheduled"
+            elif int(row[4]) >= int(time.time()):
+                my_skills[i][5] = "pending"
+        for row_trainer in user_is_trainer:
+            s_id = row_trainer[1]
+            if str(s_id) == row[0]:
+                print("HELSOSDHDJ")
+                my_skills[i][5] = "trainer"
+    my_skills = np.delete(my_skills, indices_to_delete, axis=0)
+    return my_skills
+
 
 def handle_get_my_skills_request(iuser, imagic):
     """This code handles a request for a list of a users skills.
@@ -282,38 +294,102 @@ def handle_get_my_skills_request(iuser, imagic):
 
     class_ids = format_my_returns(do_database_fetchall(f'SELECT classid FROM attendee WHERE userid = {iuser}'))
     statuses = format_my_returns(do_database_fetchall(f'SELECT status FROM attendee WHERE userid = {iuser}'))
-    my_skills = get_my_skills_array(class_ids, statuses)
+    my_skills = get_my_skills_array(iuser, class_ids, statuses)
     for row in my_skills:
         dic = {
             "type": "skill",
             "id": row[0],
-            "name": row[1],
-            "trainer": row[2],
-            "gained": row[3],
-            "state": row[4]
+            "name": row[2],
+            "trainer": row[3],
+            "gained": row[4],
+            "state": row[5]
         }
         response.append(dic)
 
-    # Todo: CHECK FORUM, is the trainer in the class?
+    # Todo: Check function again, does it work as needed?
+    #  I have changed that when a trainer becomes a trainer,
+    #  they have passed once and we change that but check later!
+
+    response.append(build_response_message(0, 'Skills list provided.'))
     return [iuser, imagic, response]
+
+def get_class_size_max_size_notes(class_ids):
+    notes = []
+    class_sizes = []
+    max_sizes = []
+    for id in class_ids:
+        note = do_database_fetchone(f'SELECT note FROM class WHERE classid = {id}')[0]
+        notes.append(note)
+        c_size = len(do_database_fetchall(f'SELECT userid FROM attendee WHERE classid = {id}'))
+        class_sizes.append(c_size)
+        m_size = do_database_fetchone(f'SELECT max FROM class WHERE classid = {id}')[0]
+        max_sizes.append(m_size)
+    return class_sizes, max_sizes, notes
+
+def get_actions(class_ids, class_sizes, iuser, max_sizes, skill_ids):
+    actions = ['join' for _ in range(len(class_ids))]
+    for i, id in enumerate(class_ids):
+        user_status = do_database_fetchone(f'Select status From attendee Where userid = {iuser} And classid = {id}')
+        if user_status:
+            if user_status[0] == 0:
+                actions[i] = 'leave'
+            if user_status[0] == 4:
+                actions[i] = 'unavailable'
+        user_has_skill = do_database_fetchone(
+            f'SELECT attendee.* FROM attendee JOIN class ON attendee.classid = class.classid WHERE attendee.userid = {iuser} AND (attendee.status = 1 OR attendee.status = 0) AND class.skillid = {skill_ids[i]} AND attendee.classid != {id}')
+        if user_has_skill:
+            actions[i] = 'unavailable'
+        is_user_trainer = do_database_fetchone(f'Select * From class Where classid = {id} And trainerid = {iuser}')
+        if is_user_trainer:
+            actions[i] = 'edit'
+        if class_sizes[i] == max_sizes[i]:
+            actions[i] = 'unavailable'
+    return actions
 
 def handle_get_upcoming_request(iuser, imagic):
     """This code handles a request for the details of a class.
        """
-
     response = []
+    check_session = check_if_session_invalid(imagic, iuser)
+    if not check_session:
+        response.append({"type": "redirect", "where": "/login.html"})
+        return [iuser, imagic, response]
 
-    ## Add code here
+    class_ids = format_my_returns(do_database_fetchall(f'SELECT classid FROM class'))
+    skill_ids, start, trainer_ids = get_skillids_start_trainerids(class_ids)
+    skill_names = get_skill_names(skill_ids)
+    trainer_names = get_trainer_names(trainer_ids)
+    class_sizes, max_sizes, notes = get_class_size_max_size_notes(class_ids)
 
+    actions = get_actions(class_ids, class_sizes, iuser, max_sizes, skill_ids)
+
+    for i in range(len(class_ids)):
+        if int(start[i]) <= int(time.time()):
+            continue
+        dic = {
+            'type': 'class',
+            'id': class_ids[i],
+            'name': skill_names[i],
+            'trainer': trainer_names[i],
+            'notes': notes[i],
+            'when': start[i],
+            'size': class_sizes[i],
+            'max': max_sizes[i],
+            'action': actions[i]
+        }
+        response.append(dic)
+
+    response.append(build_response_message(0, 'Upcoming class list provided.'))
     return [iuser, imagic, response]
 
 def handle_get_class_detail_request(iuser, imagic, content):
     """This code handles a request for a list of upcoming classes.
        """
-
     response = []
-
-    ## Add code here
+    check_session = check_if_session_invalid(imagic, iuser)
+    if not check_session:
+        response.append({"type": "redirect", "where": "/login.html"})
+        return [iuser, imagic, response]
 
     return [iuser, imagic, response]
 
@@ -322,9 +398,22 @@ def handle_join_class_request(iuser, imagic, content):
     """This code handles a request by a user to join a class.
       """
     response = []
+    check_session = check_if_session_invalid(imagic, iuser)
+    if not check_session:
+        response.append({"type": "redirect", "where": "/login.html"})
+        return [iuser, imagic, response]
 
-    ## Add code here
-
+    # Todo:
+    #  Parameter object: {”id”: classid}
+    #  A user may join a class, so long as there is space and the class is not ‘unavailable’ to them. In which case the
+    #  class size will be increased by one. Note that the current class size is not recorded in the database, only the
+    #  maximum class size. The current size must be calculated using the attendee table in the database.
+    #  The may also only join a class when they are not already recorded as being an attendee for a class for the
+    #  same skill, when the state is ‘passed’ or ‘enrolled.’ They may not join this specific class if they have been
+    #  removed from it. But are permitted to join another class for the same skill.
+    #  An updated class response must be returned if the join is successful.
+    #  A suitable message response must also be sent.
+    #  If the user is not logged in, only a redirect to the login page should be returned.
     return [iuser, imagic, response]
 
 
@@ -387,7 +476,9 @@ def handle_create_class_request(iuser, imagic, content):
     size = 1
     # Todo: add new class into class table, if trainer in the attendee table, add there as well.
     # Todo: check response, the action bit?
-    response.append({"type": "class", "id": skill_id, "name": skill_name, "trainer": trainer_name, "notes": note, "when": date_time, "size": size, "max": max_students, "action": "edit"})
+    response.append(
+        {"type": "class", "id": skill_id, "name": skill_name, "trainer": trainer_name, "notes": note, "when": date_time,
+         "size": size, "max": max_students, "action": "edit"})
     return [iuser, imagic, response]
 
 
@@ -608,20 +699,4 @@ def run():
 
 run()
 
-
-
 ## SQL QUERIES
-
-('INSERT into attendee (userid, classid, status) VALUES (1,1,0), '
- '(1,2,1),'
- ' (1,3,2), '
- '(2,2,3), '
- '(2,1,4), '
- '(2,3,1)')
-
-'INSERT into class (trainerid, skillid, start, "max", note) VALUES (1,1,1234567,10,"STFDS"), (1,1,1234578,20,"Applied DataScience"), (2,2,1234589,25, "Stats")'
-
-'INSERT into skill (name) VALUES ("Python"), ("Statistics and Probability")'
-
-'INSERT into trainer values (1,1),(2,2)'
-
