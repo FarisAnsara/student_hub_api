@@ -282,7 +282,6 @@ def get_user_is_trainer_and_clean_arr(my_skills, user_is_trainer):
         for row_trainer in user_is_trainer:
             s_id = row_trainer[1]
             if str(s_id) == row[0]:
-                print("HELSOSDHDJ")
                 my_skills[i][5] = "trainer"
     my_skills = np.delete(my_skills, indices_to_delete, axis=0)
     return my_skills
@@ -314,9 +313,9 @@ def handle_get_my_skills_request(iuser, imagic):
         }
         response.append(dic)
 
-    # Todo: Check function again, does it work as needed?
-    #  I have changed that when a trainer becomes a trainer,
-    #  they have passed once and we change that but check later!
+    # Todo:
+    #  ISUUEEEE:
+    #  WHen failed shows schedulled, check with refactor
 
     response.append(build_response_message(0, 'Skills list provided.'))
     return [iuser, imagic, response]
@@ -415,6 +414,44 @@ def handle_get_class_detail_request(iuser, imagic, content):
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
 
+    class_id = content['id']
+    skill_id, start_date, trainer_id = get_skillids_start_trainerids(class_id)
+    if str(iuser) != str(trainer_id):
+        print("iuser: ", iuser)
+        print('trainer_id: ', trainer_id)
+        response.append(build_response_message(210,  'Cannot show class: User has to be a trainer'))
+        return [iuser, imagic, response]
+
+    attendee_id_user_ids_statuses = do_database_fetchall(f'Select attendeeid,userid, status From attendee Where classid = {class_id}')
+    attendeee_ids = []
+    user_ids = []
+    statuses = []
+    for row in attendee_id_user_ids_statuses:
+        attendeee_ids.append(row[0])
+        user_ids.append(row[1])
+        statuses.append(row[2])
+    names = []
+    for id in user_ids:
+        name = do_database_fetchone(f'Select fullname From users Where userid = {id}')
+        names.append(name)
+
+    states = []
+    for status in statuses:
+        if status == 0:
+            if int(start_date) >= int(time.time()):
+                states.append('remove')
+            else:
+                states.append('update')
+        elif status == 1:
+            states.append('passed')
+        elif status == 2:
+            states.append('failed')
+        elif status == 3:
+            states.append('cancelled')
+
+    for i in range(len(attendeee_ids)):
+        response.append(build_response_attendee(attendeee_ids[i], names[i], states[i]))
+
     return [iuser, imagic, response]
 
 def handle_join_class_request(iuser, imagic, content):
@@ -458,9 +495,14 @@ def handle_join_class_request(iuser, imagic, content):
         return [iuser, imagic, response]
 
 
-    do_database_execute(f'Insert Into attendee (userid, classid, status) Values ({iuser}, {class_id}, 0)')
+    user_has_left = do_database_fetchone(f'Select * From attendee WHERE classid = {class_id} and userid = {iuser} and status = 3')
+    if user_has_left:
+        do_database_execute(f'UPDATE attendee SET status = 0 WHERE userid = {iuser} AND classid = {class_id}')
+    else:
+        do_database_execute(f'Insert Into attendee (userid, classid, status) Values ({iuser}, {class_id}, 0)')
+
     response.append(
-        build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size + 1, max_size, 'leave')
+        build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size+1, max_size, 'leave')
     )
     response.append(
         build_response_message(0, "Successfully joined class.")
@@ -476,9 +518,36 @@ def handle_leave_class_request(iuser, imagic, content):
     """This code handles a request by a user to leave a class.
     """
     response = []
+    class_id = content['id']
+    skill_id, start_date, trainer_id = get_skillids_start_trainerids(class_id)
+    skill_name = get_skill_names(skill_id)
+    trainer_name = get_trainer_names(trainer_id)
+    class_size, max_size, note = get_class_size_max_size_notes(class_id)
+    user_enrolled = do_database_fetchone(f'Select * From attendee Where userid = {iuser} and classid = {class_id}')
+    if not user_enrolled:
+        response.append(build_response_message(230, 'Cannot leave class: User not enrolled in class'))
+        return [iuser, imagic, response]
+    user_cancelled = do_database_fetchone(f'Select * From attendee Where userid = {iuser} and status = 3 and classid = {class_id}')
+    if user_cancelled:
+        response.append(build_response_message(231, 'Cannot leave class: User already left class'))
+        return [iuser, imagic, response]
+    user_removed = do_database_fetchone(f'Select * From attendee Where userid = {iuser} and status = 4 and classid = {class_id}')
+    if user_removed:
+        response.append(build_response_message(232, 'Cannot leave class: User has been removed from class'))
+        return [iuser, imagic, response]
+    if trainer_id == iuser:
+        response.append(build_response_message(233, "Cannot leave class: user is the trainer of this class"))
+        return [iuser, imagic, response]
+    if int(start_date) <= int(time.time()):
+        print(int(start_date))
+        print(int(time.time()))
+        response.append(build_response_message(231, 'Cannot leave class: Class has already started'))
+        # this already protects from passed and failed and that means the class has already passed
+        return [iuser, imagic, response]
 
-    ## Add code here
-
+    do_database_execute(f'UPDATE attendee SET status = 3 WHERE userid = {iuser} AND classid = {class_id}')
+    response.append(build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size, max_size, 'join'))
+    response.append(build_response_message(0, 'Successfully left class'))
     return [iuser, imagic, response]
 
 
