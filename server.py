@@ -422,6 +422,8 @@ def handle_get_class_detail_request(iuser, imagic, content):
         response.append(build_response_message(210,  'Cannot show class: User has to be a trainer'))
         return [iuser, imagic, response]
 
+    skill_name = get_skill_names(skill_id)
+
     attendee_id_user_ids_statuses = do_database_fetchall(f'Select attendeeid,userid, status From attendee Where classid = {class_id}')
     attendeee_ids = []
     user_ids = []
@@ -449,9 +451,21 @@ def handle_get_class_detail_request(iuser, imagic, content):
         elif status == 3:
             states.append('cancelled')
 
+    trainer_name = get_trainer_names(trainer_id)
+    class_size, max_size, note = get_class_size_max_size_notes(class_id)
+
+    # Todo:
+    #  check action in the class response, should it be cancel or edit?
+    response.append(
+        build_response_class(class_id, skill_name, trainer_name, note, start_date, class_size,
+                             max_size, "cancel"))
+
     for i in range(len(attendeee_ids)):
         response.append(build_response_attendee(attendeee_ids[i], names[i], states[i]))
 
+    # Todo:
+    #  - check all checks in here
+    #  - refactor
     return [iuser, imagic, response]
 
 def handle_join_class_request(iuser, imagic, content):
@@ -518,6 +532,10 @@ def handle_leave_class_request(iuser, imagic, content):
     """This code handles a request by a user to leave a class.
     """
     response = []
+    check_session = check_if_session_invalid(imagic, iuser)
+    if not check_session:
+        response.append({"type": "redirect", "where": "/login.html"})
+        return [iuser, imagic, response]
     class_id = content['id']
     skill_id, start_date, trainer_id = get_skillids_start_trainerids(class_id)
     skill_name = get_skill_names(skill_id)
@@ -555,6 +573,10 @@ def handle_cancel_class_request(iuser, imagic, content):
     """This code handles a request to cancel an entire class."""
 
     response = []
+    check_session = check_if_session_invalid(imagic, iuser)
+    if not check_session:
+        response.append({"type": "redirect", "where": "/login.html"})
+        return [iuser, imagic, response]
 
     ## Add code here
 
@@ -565,8 +587,43 @@ def handle_update_attendee_request(iuser, imagic, content):
     """This code handles a request to cancel a user attendance at a class by a trainer"""
 
     response = []
-    ## Add code here
+    check_session = check_if_session_invalid(imagic, iuser)
+    if not check_session:
+        response.append({"type": "redirect", "where": "/login.html"})
+        return [iuser, imagic, response]
 
+    attendee_id = content['id']
+    state_input = content['state']
+    attendee_user_id = do_database_fetchone(f'Select userid From attendee Where attendeeid = {attendee_id}')
+    if not attendee_user_id:
+        response.append(build_response_message(240, 'Cannot update attendee: Attendee deos not exist, deleted entry successfully.'))
+        do_database_execute(f'Delete from attendee Where attendeeid = {attendee_id}')
+        return [iuser, imagic, response]
+    name = do_database_fetchone(f'Select fullname From users Where userid = {attendee_user_id[0]}')
+    if not name:
+        response.append(build_response_message(240, 'Cannot update attendee: Attendee deos not exist, deleted entry successfully.'))
+        do_database_execute(f'Delete from attendee Where attendeeid = {attendee_id}')
+        return [iuser, imagic, response]
+
+    if state_input == "pass":
+        new_state = 'passed'
+        status_table = 1
+    elif state_input == 'fail':
+        new_state = 'failed'
+        status_table = 2
+    elif state_input == 'remove':
+        new_state = 'removed'
+        status_table = 4
+    else:
+        response.append(build_response_message(241, 'Cannot update attendee: Please input a valid new state (pass/fail/remove)'))
+        return [iuser, imagic, response]
+
+    do_database_execute(f'Update attendee Set status = {status_table} Where attendeeid = {attendee_id}')
+    response.append(build_response_attendee(attendee_id, name[0], new_state))
+
+    # Todo:
+    #  when the trainer choses to cancel (remove) a user, it shows my error msg.
+    #  the issue maybe in the get_class function
     return [iuser, imagic, response]
 
 
