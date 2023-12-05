@@ -120,14 +120,17 @@ def build_response_redirect(where):
     return {"type": "redirect", "where": where}
 
 
-def check_if_session_invalid(imagic, iuser):
+def check_if_session_valid(imagic, iuser):
     # Todo: check this function working
-    return do_database_fetchone(f'SELECT magic FROM session WHERE userid = {iuser}')[0] == imagic
+    magic_current = do_database_fetchone(f'SELECT magic FROM session WHERE userid = {iuser}')
+    if not magic_current:
+        return True
+    return magic_current[0] == imagic
 
 
-def check_username_in_database(username):
-    res = do_database_fetchone(f'SELECT * FROM users WHERE username = "{username}"')
-    return bool(res)
+def get_userid(username):
+    userid = do_database_fetchone(f'SELECT userid FROM users WHERE username = "{username}"')
+    return userid
 
 
 def check_password_for_username(username, password):
@@ -150,15 +153,15 @@ def handle_login_request(iuser, imagic, content):
     if not password:
         response.append(build_response_message(101, 'Please provide a password.'))
         return [iuser, imagic, response]
-    if not check_username_in_database(username):
+    userid = get_userid(username)
+    if not userid:
         response.append(build_response_message(200, 'Username: ' + username + ' does not exist.'))
         return [iuser, imagic, response]
+    iuser = userid[0]
     if not check_password_for_username(username, password):
         response.append(build_response_message(201, 'Incorrect password.'))
         return [iuser, imagic, response]
     imagic = random_digits(10)
-    iuser = do_database_fetchone(f'SELECT userid FROM users WHERE username = "{username}"')[0]
-    # Todo: it is not logging out previous sessions even though the session table updates here, it doesnt seem to update all together.
     do_database_execute(f'DELETE FROM session WHERE userid = "{iuser}"')
     do_database_execute(f'INSERT INTO session (userid, magic) VALUES ({iuser},{imagic})')
     response.append({"type": "redirect", "where": "\index.html"})
@@ -171,11 +174,11 @@ def handle_logout_request(iuser, imagic, parameters):
     need to ensure the end of the session is recorded in the database
         And that the session magic is revoked."""
     response = []
-    check_session = check_if_session_invalid(imagic, iuser)
+    check_session = check_if_session_valid(imagic, iuser)
     if not check_session:
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
-
+    do_database_execute(f'Delete From session Where userid = {iuser}')
     response.append({"type": "redirect", "where": "\logout.html"})
     return [iuser, imagic, response]
 
@@ -296,7 +299,7 @@ def handle_get_my_skills_request(iuser, imagic):
 
     response = []
     print(iuser, imagic)
-    check_session = check_if_session_invalid(imagic, iuser)
+    check_session = check_if_session_valid(imagic, iuser)
     print(check_session)
     if not check_session:
         response.append({"type": "redirect", "where": "/login.html"})
@@ -304,22 +307,35 @@ def handle_get_my_skills_request(iuser, imagic):
 
     class_ids = format_my_returns(do_database_fetchall(f'SELECT classid FROM attendee WHERE userid = {iuser}'))
     statuses = format_my_returns(do_database_fetchall(f'SELECT status FROM attendee WHERE userid = {iuser}'))
-    my_skills = get_my_skills_array(iuser, class_ids, statuses)
-    for row in my_skills:
-        dic = {
-            "type": "skill",
-            "id": row[0],
-            "name": row[2],
-            "trainer": row[3],
-            "gained": row[4],
-            "state": row[5]
-        }
-        response.append(dic)
+    skill_ids, start_dates, trainer_ids = get_skillids_start_trainerids(class_ids)
+    skill_names = get_skill_names(skill_ids)
+    trainer_names = get_trainer_names(trainer_ids)
+    states = get_states_of_users(statuses)
+
+    indices_to_skip = []
+    user_is_trainer = do_database_fetchall(f'SELECT trainerid, skillid FROM trainer WHERE trainerid = {iuser}')
+    for i in range(len(class_ids)):
+        if states[i] in ["cancelled", "removed"]:
+            indices_to_skip.append(i)
+        elif states[i] == 'enrolled':
+            if int(start_dates[i]) >= int(time.time()):
+                states[i] = "scheduled"
+            elif int(start_dates[i]) < int(time.time()):
+                states[i] = "pending"
+        for row_trainer in user_is_trainer:
+            s_id = row_trainer[1]
+            if s_id == skill_ids[i]:
+                states[i] = "trainer"
+
+    for i in range(len(class_ids)):
+        if i in indices_to_skip:
+            continue
+        response.append(build_response_skill(skill_ids[i], skill_names[i], start_dates[i], trainer_names[i], states[i]))
+
 
     # Todo:
-    #  ISUUEEEE:
-    #  WHen failed shows schedulled, check with refactor
-
+    #  You have to arrange the responses according to the state and date as shown in the pdf
+    #  Also check all the checks here
     response.append(build_response_message(0, 'Skills list provided.'))
     return [iuser, imagic, response]
 
@@ -375,7 +391,7 @@ def handle_get_upcoming_request(iuser, imagic):
     """This code handles a request for the details of a class.
        """
     response = []
-    check_session = check_if_session_invalid(imagic, iuser)
+    check_session = check_if_session_valid(imagic, iuser)
     if not check_session:
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
@@ -415,7 +431,7 @@ def handle_get_class_detail_request(iuser, imagic, content):
     """This code handles a request for a list of upcoming classes.
        """
     response = []
-    check_session = check_if_session_invalid(imagic, iuser)
+    check_session = check_if_session_valid(imagic, iuser)
     if not check_session:
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
@@ -483,7 +499,7 @@ def handle_join_class_request(iuser, imagic, content):
     """This code handles a request by a user to join a class.
       """
     response = []
-    check_session = check_if_session_invalid(imagic, iuser)
+    check_session = check_if_session_valid(imagic, iuser)
     if not check_session:
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
@@ -545,7 +561,7 @@ def handle_leave_class_request(iuser, imagic, content):
     """This code handles a request by a user to leave a class.
     """
     response = []
-    check_session = check_if_session_invalid(imagic, iuser)
+    check_session = check_if_session_valid(imagic, iuser)
     if not check_session:
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
@@ -586,7 +602,7 @@ def handle_cancel_class_request(iuser, imagic, content):
     """This code handles a request to cancel an entire class."""
 
     response = []
-    check_session = check_if_session_invalid(imagic, iuser)
+    check_session = check_if_session_valid(imagic, iuser)
     if not check_session:
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
@@ -629,7 +645,7 @@ def handle_update_attendee_request(iuser, imagic, content):
     """This code handles a request to cancel a user attendance at a class by a trainer"""
 
     response = []
-    check_session = check_if_session_invalid(imagic, iuser)
+    check_session = check_if_session_valid(imagic, iuser)
     if not check_session:
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
