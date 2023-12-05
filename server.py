@@ -11,23 +11,14 @@
 
 # import the various libraries needed
 import http.cookies as Cookie  # some cookie handling support
-import string
 from http.server import BaseHTTPRequestHandler, HTTPServer  # the heavy lifting of the web server
 import urllib  # some url parsing support
 import json  # support for json encoding
 import sys  # needed for agument handling
-import time  # time support
-import pytz
-
-import base64  # some encoding support
 import sqlite3  # sql database
 import random  # generate random numbers
 import time  # needed to record when stuff happened
 import datetime
-
-import numpy
-import numpy as np
-
 
 def random_digits(n):
     """This function provides a random integer with the specfied number of digits and no leading zeros."""
@@ -249,49 +240,6 @@ def get_skillids_start_trainerids(class_ids):
             trainer_ids.append(out[1])
             start_dates.append(out[2])
     return skill_ids, start_dates, trainer_ids
-
-
-def get_my_skills_array(iuser, class_ids, statuses):
-    my_skills = []
-
-    skill_ids, start_dates, trainer_ids = get_skillids_start_trainerids(class_ids)
-    my_skills.append(skill_ids)
-    my_skills.append(trainer_ids)
-
-    skills = get_skill_names(skill_ids)
-    my_skills.append(skills)
-
-    trainer_names = get_trainer_names(trainer_ids)
-    my_skills.append(trainer_names)
-
-    my_skills.append(start_dates)
-
-    states = get_states_of_users(statuses)
-    my_skills.append(states)
-
-    my_skills = np.array(my_skills).transpose()
-    user_is_trainer = do_database_fetchall(f'SELECT trainerid, skillid FROM trainer WHERE trainerid = {iuser}')
-    my_skills = get_user_is_trainer_and_clean_arr(my_skills, user_is_trainer)
-    return my_skills
-
-
-def get_user_is_trainer_and_clean_arr(my_skills, user_is_trainer):
-    indices_to_delete = []
-    for i, row in enumerate(my_skills):
-        if row[5] in ["cancelled", "removed"]:
-            indices_to_delete.append(i)
-        elif row[5] == 'enrolled':
-            if int(row[4]) < int(time.time()):
-                my_skills[i][5] = "scheduled"
-            elif int(row[4]) >= int(time.time()):
-                my_skills[i][5] = "pending"
-        for row_trainer in user_is_trainer:
-            s_id = row_trainer[1]
-            if str(s_id) == row[0]:
-                my_skills[i][5] = "trainer"
-    my_skills = np.delete(my_skills, indices_to_delete, axis=0)
-    return my_skills
-
 
 def handle_get_my_skills_request(iuser, imagic):
     """This code handles a request for a list of a users skills.
