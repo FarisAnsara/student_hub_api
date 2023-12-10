@@ -20,6 +20,7 @@ import random  # generate random numbers
 import time  # needed to record when stuff happened
 import datetime
 
+
 def random_digits(n):
     """This function provides a random integer with the specfied number of digits and no leading zeros."""
     range_start = 10 ** (n - 1)
@@ -202,7 +203,10 @@ def get_states_of_users(statuses):
 
 def get_trainer_names(trainer_ids):
     if isinstance(trainer_ids, int):
-        return do_database_fetchone(f'SELECT fullname FROM users WHERE userid = {trainer_ids}')[0]
+        name = do_database_fetchone(f'SELECT fullname FROM users WHERE userid = {trainer_ids}')
+        if name:
+            return name[0]
+        return None
     trainer_names = []
     for id in trainer_ids:
         name = do_database_fetchone(f'SELECT fullname FROM users WHERE userid = {id}')
@@ -213,7 +217,10 @@ def get_trainer_names(trainer_ids):
 
 def get_skill_names(skill_ids):
     if isinstance(skill_ids, int):
-        return do_database_fetchone(f'SELECT name FROM skill WHERE skillid = {skill_ids}')[0]
+        skill = do_database_fetchone(f'SELECT name FROM skill WHERE skillid = {skill_ids}')
+        if skill:
+            return skill[0]
+        return None
     skills = []
     for val in skill_ids:
         skill = do_database_fetchone(f'SELECT name FROM skill WHERE skillid = {val}')
@@ -240,6 +247,7 @@ def get_skillids_start_trainerids(class_ids):
             trainer_ids.append(out[1])
             start_dates.append(out[2])
     return skill_ids, start_dates, trainer_ids
+
 
 def handle_get_my_skills_request(iuser, imagic):
     """This code handles a request for a list of a users skills.
@@ -280,7 +288,6 @@ def handle_get_my_skills_request(iuser, imagic):
             continue
         response.append(build_response_skill(skill_ids[i], skill_names[i], start_dates[i], trainer_names[i], states[i]))
 
-
     # Todo:
     #  You have to arrange the responses according to the state and date as shown in the pdf
     #  Also check all the checks here
@@ -311,18 +318,19 @@ def get_actions(class_ids, class_sizes, iuser, max_sizes, skill_ids):
     actions = ['join' for _ in range(len(class_ids))]
     for i, id in enumerate(class_ids):
         user_status = do_database_fetchall(f'Select status From attendee Where userid = {iuser} And classid = {id}')
+        print('user statuses = ', user_status)
         if user_status:
             for status in user_status:
                 if status[0] == 0:
                     actions[i] = 'leave'
                 if status[0] == 4:
                     actions[i] = 'unavailable'
-                    break
         user_has_skill = do_database_fetchone(
             f'SELECT attendee.* FROM attendee JOIN class ON attendee.classid = class.classid WHERE attendee.userid = {iuser} AND (attendee.status = 1 OR attendee.status = 0) AND class.skillid = {skill_ids[i]} AND attendee.classid != {id}')
         if user_has_skill:
             actions[i] = 'unavailable'
-        is_user_trainer_for_skill = do_database_fetchone(f'Select * From trainer Where trainerid = {iuser}')
+        is_user_trainer_for_skill = do_database_fetchone(
+            f'Select * From trainer Where trainerid = {iuser} and skillid = {skill_ids[i]}')
         if is_user_trainer_for_skill:
             actions[i] = 'unavailable'
         is_user_trainer = do_database_fetchone(f'Select * From class Where classid = {id} And trainerid = {iuser}')
@@ -349,27 +357,14 @@ def handle_get_upcoming_request(iuser, imagic):
     skill_names = get_skill_names(skill_ids)
     trainer_names = get_trainer_names(trainer_ids)
     class_sizes, max_sizes, notes = get_class_size_max_size_notes(class_ids)
-
     actions = get_actions(class_ids, class_sizes, iuser, max_sizes, skill_ids)
 
     for i in range(len(class_ids)):
         if int(start[i]) <= int(time.time()):
             continue
-        dic = {
-            'type': 'class',
-            'id': class_ids[i],
-            'name': skill_names[i],
-            'trainer': trainer_names[i],
-            'notes': notes[i],
-            'when': start[i],
-            'size': class_sizes[i],
-            'max': max_sizes[i],
-            'action': actions[i]
-        }
         response.append(
             build_response_class(class_ids[i], skill_names[i], trainer_names[i], notes[i], start[i], class_sizes[i],
                                  max_sizes[i], actions[i]))
-        response.append(dic)
 
     response.append(build_response_message(0, 'Upcoming class list provided.'))
     return [iuser, imagic, response]
@@ -389,12 +384,13 @@ def handle_get_class_detail_request(iuser, imagic, content):
     if str(iuser) != str(trainer_id):
         print("iuser: ", iuser)
         print('trainer_id: ', trainer_id)
-        response.append(build_response_message(210,  'Cannot show class: User has to be a trainer'))
+        response.append(build_response_message(210, 'Cannot show class: User has to be a trainer'))
         return [iuser, imagic, response]
 
     skill_name = get_skill_names(skill_id)
 
-    attendee_id_user_ids_statuses = do_database_fetchall(f'Select attendeeid,userid, status From attendee Where classid = {class_id}')
+    attendee_id_user_ids_statuses = do_database_fetchall(
+        f'Select attendeeid, userid, status From attendee Where classid = {class_id}')
     attendeee_ids = []
     user_ids = []
     statuses = []
@@ -423,8 +419,6 @@ def handle_get_class_detail_request(iuser, imagic, content):
 
     trainer_name = get_trainer_names(trainer_id)
     class_size, max_size, note = get_class_size_max_size_notes(class_id)
-    # Todo:
-    #  check action in the class response, how do i get the right action response?
 
     if max_size == 0:
         action = 'cancelled'
@@ -442,6 +436,7 @@ def handle_get_class_detail_request(iuser, imagic, content):
     #  - check all checks in here
     #  - refactor
     return [iuser, imagic, response]
+
 
 def handle_join_class_request(iuser, imagic, content):
     """This code handles a request by a user to join a class.
@@ -462,14 +457,17 @@ def handle_join_class_request(iuser, imagic, content):
     if trainer_id == iuser:
         response.append(build_response_message(221, 'Cannot join class: User is trainer so cannot join class.'))
         return [iuser, imagic, response]
-    user_already_in_class = do_database_fetchone(f'Select * From attendee Where userid = {iuser} and classid = {class_id} and status = 0')
+    user_already_in_class = do_database_fetchone(
+        f'Select * From attendee Where userid = {iuser} and classid = {class_id} and status = 0')
     if user_already_in_class:
         response.append(build_response_message(222, 'Cannot join class: User already enrolled in class.'))
         return [iuser, imagic, response]
-    user_already_passed_class = do_database_fetchone(f'Select * From attendee Where userid = {iuser} and classid = {class_id} and status = 1')
+    user_already_passed_class = do_database_fetchone(
+        f'Select * From attendee Where userid = {iuser} and classid = {class_id} and status = 1')
     if user_already_passed_class:
         response.append(build_response_message(223, 'Cannot join class: User already passed class.'))
-    user_has_skill = do_database_fetchone(f'SELECT attendee.* FROM attendee JOIN class ON attendee.classid = class.classid WHERE attendee.userid = {iuser} AND (attendee.status = 1 OR attendee.status = 0) AND class.skillid = {skill_id} AND attendee.classid != {class_id}')
+    user_has_skill = do_database_fetchone(
+        f'SELECT attendee.* FROM attendee JOIN class ON attendee.classid = class.classid WHERE attendee.userid = {iuser} AND (attendee.status = 1 OR attendee.status = 0) AND class.skillid = {skill_id} AND attendee.classid != {class_id}')
     if user_has_skill:
         response.append(build_response_message(224, 'Cannot join class: User already has this skill or enrolled in a '
                                                     'class for this skill'))
@@ -477,7 +475,8 @@ def handle_join_class_request(iuser, imagic, content):
     if max_size == 0:
         response.append(build_response_message(225, 'Cannot join class: This class has been cancelled by the trainer'))
         return [iuser, imagic, response]
-    user_has_been_removed = do_database_fetchone(f'Select * From attendee Where userid = {iuser} and classid = {class_id} and status = 4')
+    user_has_been_removed = do_database_fetchone(
+        f'Select * From attendee Where userid = {iuser} and classid = {class_id} and status = 4')
     if user_has_been_removed:
         response.append(build_response_message(226, 'Cannot join class: User has been removed from this class, '
                                                     'so cannot rejoin'))
@@ -486,22 +485,20 @@ def handle_join_class_request(iuser, imagic, content):
     if is_user_trainer_for_skill:
         response.append(build_response_message(227, 'Cannot join class: User is listed as a trainer for this skill'))
 
-    user_has_left = do_database_fetchone(f'Select * From attendee WHERE classid = {class_id} and userid = {iuser} and status = 3')
+    user_has_left = do_database_fetchone(
+        f'Select * From attendee WHERE classid = {class_id} and userid = {iuser} and status = 3')
     if user_has_left:
         do_database_execute(f'UPDATE attendee SET status = 0 WHERE userid = {iuser} AND classid = {class_id}')
     else:
         do_database_execute(f'Insert Into attendee (userid, classid, status) Values ({iuser}, {class_id}, 0)')
 
     response.append(
-        build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size+1, max_size, 'leave')
+        build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size + 1, max_size, 'leave')
     )
     response.append(
         build_response_message(0, "Successfully joined class.")
     )
 
-    # Todo:
-    #  check if all checks are here
-    #  when class cancelled returns full
     return [iuser, imagic, response]
 
 
@@ -522,11 +519,13 @@ def handle_leave_class_request(iuser, imagic, content):
     if not user_enrolled:
         response.append(build_response_message(230, 'Cannot leave class: User not enrolled in class'))
         return [iuser, imagic, response]
-    user_cancelled = do_database_fetchone(f'Select * From attendee Where userid = {iuser} and status = 3 and classid = {class_id}')
+    user_cancelled = do_database_fetchone(
+        f'Select * From attendee Where userid = {iuser} and status = 3 and classid = {class_id}')
     if user_cancelled:
         response.append(build_response_message(231, 'Cannot leave class: User already left class'))
         return [iuser, imagic, response]
-    user_removed = do_database_fetchone(f'Select * From attendee Where userid = {iuser} and status = 4 and classid = {class_id}')
+    user_removed = do_database_fetchone(
+        f'Select * From attendee Where userid = {iuser} and status = 4 and classid = {class_id}')
     if user_removed:
         response.append(build_response_message(232, 'Cannot leave class: User has been removed from class'))
         return [iuser, imagic, response]
@@ -534,14 +533,12 @@ def handle_leave_class_request(iuser, imagic, content):
         response.append(build_response_message(233, "Cannot leave class: user is the trainer of this class"))
         return [iuser, imagic, response]
     if int(start_date) <= int(time.time()):
-        print(int(start_date))
-        print(int(time.time()))
         response.append(build_response_message(231, 'Cannot leave class: Class has already started'))
-        # this already protects from passed and failed and that means the class has already passed
         return [iuser, imagic, response]
 
     do_database_execute(f'UPDATE attendee SET status = 3 WHERE userid = {iuser} AND classid = {class_id}')
-    response.append(build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size, max_size, 'join'))
+    response.append(
+        build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size, max_size, 'join'))
     response.append(build_response_message(0, 'Successfully left class'))
     return [iuser, imagic, response]
 
@@ -558,7 +555,8 @@ def handle_cancel_class_request(iuser, imagic, content):
     class_id = content['id']
     skill_id, start_date, trainer_id = get_skillids_start_trainerids(class_id)
     if str(iuser) != str(trainer_id):
-        response.append(build_response_message(240, 'Cannot cancel class: User has to be the registered trainer in order to cancel a class'))
+        response.append(build_response_message(240,
+                                               'Cannot cancel class: User has to be the registered trainer in order to cancel a class'))
         return [iuser, imagic, response]
 
     do_database_execute(f'Update class Set max = 0 Where classid = {class_id}')
@@ -566,8 +564,8 @@ def handle_cancel_class_request(iuser, imagic, content):
     skill_name = get_skill_names(skill_id)
     trainer_name = get_trainer_names(trainer_id)
     max_size = 0
-    response.append(build_response_class(class_id, skill_name, trainer_name, note, start_date, class_size, max_size, 'cancelled'))
-
+    response.append(
+        build_response_class(class_id, skill_name, trainer_name, note, start_date, class_size, max_size, 'cancelled'))
 
     attendee_ids = do_database_fetchall(f'Select attendeeid From attendee Where classid = {class_id}')
     if attendee_ids:
@@ -602,16 +600,16 @@ def handle_update_attendee_request(iuser, imagic, content):
     state_input = content['state']
     attendee_user_id = do_database_fetchone(f'Select userid From attendee Where attendeeid = {attendee_id}')
     if not attendee_user_id:
-        response.append(build_response_message(250, 'Cannot update attendee: Attendee deos not exist, deleted entry successfully.'))
+        response.append(
+            build_response_message(250, 'Cannot update attendee: Attendee deos not exist, deleted entry successfully.'))
         do_database_execute(f'Delete from attendee Where attendeeid = {attendee_id}')
         return [iuser, imagic, response]
     name = do_database_fetchone(f'Select fullname From users Where userid = {attendee_user_id[0]}')
     if not name:
-        response.append(build_response_message(250, 'Cannot update attendee: Attendee deos not exist, deleted entry successfully.'))
+        response.append(
+            build_response_message(250, 'Cannot update attendee: Attendee deos not exist, deleted entry successfully.'))
         do_database_execute(f'Delete from attendee Where attendeeid = {attendee_id}')
         return [iuser, imagic, response]
-
-    print(state_input)
 
     if state_input == "pass":
         new_state = 'passed'
@@ -619,19 +617,17 @@ def handle_update_attendee_request(iuser, imagic, content):
     elif state_input == 'fail':
         new_state = 'failed'
         status_table = 2
-    elif state_input == 'cancel':
+    elif state_input == 'remove':
         new_state = 'removed'
         status_table = 4
     else:
-        response.append(build_response_message(251, 'Cannot update attendee: Please input a valid new state (pass/fail/remove)'))
+        response.append(
+            build_response_message(251, 'Cannot update attendee: Please input a valid new state (pass/fail/remove)'))
         return [iuser, imagic, response]
 
     do_database_execute(f'Update attendee Set status = {status_table} Where attendeeid = {attendee_id}')
     response.append(build_response_attendee(attendee_id, name[0], new_state))
 
-    # Todo:
-    #  when the trainer choses to cancel (remove) a user, it shows my error msg.
-    #  the issue maybe in the get_class function
     return [iuser, imagic, response]
 
 
@@ -650,7 +646,8 @@ def handle_create_class_request(iuser, imagic, content):
 
     is_trainer_for_skill = do_database_fetchone(f'Select * From trainer Where trainerid = {iuser}')
     if not is_trainer_for_skill:
-        response.append(build_response_message(260, 'Cannot create class: User is not a listed trainer for this skill.'))
+        response.append(
+            build_response_message(260, 'Cannot create class: User is not a listed trainer for this skill.'))
 
     skill_name = get_skill_names(skill_id)
 
@@ -672,13 +669,17 @@ def handle_create_class_request(iuser, imagic, content):
         return [iuser, imagic, response]
 
     if max_students > 10 or max_students < 1:
-        response.append(build_response_message(264, 'Cannot create class: Max class size should be between 1-10 students.'))
+        response.append(
+            build_response_message(264, 'Cannot create class: Max class size should be between 1-10 students.'))
         return [iuser, imagic, response]
 
-    class_id = do_database_execute(f'Insert into class (trainerid, skillid, start, max, note) VALUES ({iuser},{skill_id},{start_date},{max_students},"{note}")', get_primary_key = True)
+    class_id = do_database_execute(
+        f'Insert into class (trainerid, skillid, start, max, note) VALUES ({iuser},{skill_id},{start_date},{max_students},"{note}")',
+        get_primary_key=True)
     class_size = 0
 
-    response.append(build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size, max_students, 'edit'))
+    response.append(
+        build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size, max_students, 'edit'))
     response.append(build_response_redirect(f"/class/{class_id}"))
     response.append(build_response_message(0, "Successfully created class."))
     return [iuser, imagic, response]
@@ -900,7 +901,3 @@ def run():
 
 
 run()
-## SQL QUERIES
-
-# Todo:
-#  - check join for test2 for example, they can join a python even though they have skill

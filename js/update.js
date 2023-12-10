@@ -141,7 +141,7 @@ function kmc_class_attendee(id, name, action)
 
   if(action == 'remove')
   {
-    s += '<button type="submit" class="btn btn-primary btn-block" onclick="command_update_attendee('+id+',\'cancel\');"><h3>&nbsp;Cancel&nbsp;</h3></button>';
+    s += '<button type="submit" class="btn btn-primary btn-block" onclick="command_update_attendee('+id+',\'remove\');"><h3>&nbsp;Remove&nbsp;</h3></button>';
 
   } else if(action == 'update')
   {
@@ -174,27 +174,38 @@ function kmc_my_skill(id,name,trainer,gained,state)
 {
   s  = '<div class="row border mt-3">';
   s += '<div class="col-8"><h3>' + name + '</h3>';
-  s += '<div>Gained: ' + kmc_show_date(gained) + '<br>Trainer: ' + trainer+'<br></div></div>';
-  s += '<div class="col-4 text-end">';
+
 
   if(state == 'trainer')
   {
+    s += '<div>Gained: ' + kmc_show_date(gained) + '<br>Trainer: ' + trainer+'<br></div></div>';
+    s += '<div class="col-4 text-end">';
     s += '<button type="submit" class="btn btn-primary btn-block" onclick="window.location.href=\'/create/'+id+'\';");><h3>&nbsp;Create Class&nbsp;</h3></button>';
 
   } else if(state == 'scheduled')
   {
-       s += '<h3>Scheduled</h3>';
+    s += '<div>Scheduled: ' + kmc_show_date(gained) + '<br>Trainer: ' + trainer+'<br></div></div>';
+    s += '<div class="col-4 text-end">';
+    s += '<h3>Scheduled</h3>';
   } else if(state == 'pending')
   {
-       s += '<h3>Pending</h3>';
+    s += '<div>Scheduled: ' + kmc_show_date(gained) + '<br>Trainer: ' + trainer+'<br></div></div>';
+    s += '<div class="col-4 text-end">';
+    s += '<h3>Pending</h3>';
   } else if(state == 'failed')
   {
+    s += '<div>Scheduled: ' + kmc_show_date(gained) + '<br>Trainer: ' + trainer+'<br></div></div>';
+    s += '<div class="col-4 text-end">';
     s += '<h3>Failed</h3>';
   } else if(state == 'passed')
   {
+    s += '<div>Gained: ' + kmc_show_date(gained) + '<br>Trainer: ' + trainer+'<br></div></div>';
+    s += '<div class="col-4 text-end">';
     s += '<h3>Passed</h3>';
   } else
   {
+    s += '<div>Scheduled: ' + kmc_show_date(gained) + '<br>Trainer: ' + trainer+'<br></div></div>';
+    s += '<div class="col-4 text-end">';
     s += '<h3>Err</h3>';
   }
 
@@ -296,7 +307,7 @@ function command_login()
 
 function command_logout()
 {
-    kmc_send_post('/action','command=logout','');
+    kmc_send_post('/action?command=logout','');
 }
 
 function command_join_class(id)
