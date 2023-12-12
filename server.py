@@ -171,7 +171,7 @@ def handle_logout_request(iuser, imagic, parameters):
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
     do_database_execute(f'Delete From session Where userid = {iuser}')
-    response.append({"type": "redirect", "where": "\logout.html"})
+    response.append({"type": "redirect", "where": "/logout.html"})
     return [iuser, imagic, response]
 
 
@@ -261,8 +261,14 @@ def handle_get_my_skills_request(iuser, imagic):
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
 
-    class_ids = format_my_returns(do_database_fetchall(f'SELECT classid FROM attendee WHERE userid = {iuser}'))
-    statuses = format_my_returns(do_database_fetchall(f'SELECT status FROM attendee WHERE userid = {iuser}'))
+
+    start_col_exist = do_database_fetchone(f'SELECT start FROM attendee WHERE start IN (SELECT name FROM pragma_table_info(attendee))')
+    if not start_col_exist:
+        do_database_execute(f'ALTER TABLE attendee ADD start INT')
+    do_database_execute(f'UPDATE attendee SET start = class.start FROM class WHERE attendee.classid = class.classid')
+
+    class_ids = format_my_returns(do_database_fetchall(f'SELECT classid FROM attendee WHERE userid = {iuser} ORDER BY start'))
+    statuses = format_my_returns(do_database_fetchall(f'SELECT status FROM attendee WHERE userid = {iuser} ORDER BY start'))
     skill_ids, start_dates, trainer_ids = get_skillids_start_trainerids(class_ids)
     skill_names = get_skill_names(skill_ids)
     trainer_names = get_trainer_names(trainer_ids)
@@ -298,7 +304,7 @@ def handle_get_my_skills_request(iuser, imagic):
 def get_class_size_max_size_notes(class_ids):
     if isinstance(class_ids, int):
         note = do_database_fetchone(f'SELECT note FROM class WHERE classid = {class_ids}')[0]
-        c_size = len(do_database_fetchall(f'SELECT userid FROM attendee WHERE classid = {class_ids}'))
+        c_size = len(do_database_fetchall(f'SELECT userid FROM attendee WHERE classid = {class_ids} AND status != 3 And status != 4'))
         m_size = do_database_fetchone(f'SELECT max FROM class WHERE classid = {class_ids}')[0]
         return c_size, m_size, note
     notes = []
@@ -307,7 +313,7 @@ def get_class_size_max_size_notes(class_ids):
     for id in class_ids:
         note = do_database_fetchone(f'SELECT note FROM class WHERE classid = {id}')[0]
         notes.append(note)
-        c_size = len(do_database_fetchall(f'SELECT userid FROM attendee WHERE classid = {id}'))
+        c_size = len(do_database_fetchall(f'SELECT userid FROM attendee WHERE classid = {id} AND status != 3 And status != 4'))
         class_sizes.append(c_size)
         m_size = do_database_fetchone(f'SELECT max FROM class WHERE classid = {id}')[0]
         max_sizes.append(m_size)
@@ -348,11 +354,12 @@ def handle_get_upcoming_request(iuser, imagic):
        """
     response = []
     check_session = check_if_session_valid(imagic, iuser)
+
     if not check_session:
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
 
-    class_ids = format_my_returns(do_database_fetchall(f'SELECT classid FROM class'))
+    class_ids = format_my_returns(do_database_fetchall(f'SELECT classid FROM class ORDER BY start'))
     skill_ids, start, trainer_ids = get_skillids_start_trainerids(class_ids)
     skill_names = get_skill_names(skill_ids)
     trainer_names = get_trainer_names(trainer_ids)
@@ -363,8 +370,9 @@ def handle_get_upcoming_request(iuser, imagic):
         if int(start[i]) <= int(time.time()):
             continue
         response.append(
-            build_response_class(class_ids[i], skill_names[i], trainer_names[i], notes[i], start[i], class_sizes[i],
+            build_response_class(class_ids[i], skill_names[i], trainer_names[i], start[i], notes[i], class_sizes[i],
                                  max_sizes[i], actions[i]))
+
 
     response.append(build_response_message(0, 'Upcoming class list provided.'))
     return [iuser, imagic, response]
@@ -538,7 +546,7 @@ def handle_leave_class_request(iuser, imagic, content):
 
     do_database_execute(f'UPDATE attendee SET status = 3 WHERE userid = {iuser} AND classid = {class_id}')
     response.append(
-        build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size, max_size, 'join'))
+        build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size - 1, max_size, 'join'))
     response.append(build_response_message(0, 'Successfully left class'))
     return [iuser, imagic, response]
 
