@@ -254,49 +254,47 @@ def handle_get_my_skills_request(iuser, imagic):
        You must return a value for all vehicle types, even when it's zero."""
 
     response = []
-    print(iuser, imagic)
     check_session = check_if_session_valid(imagic, iuser)
-    print(check_session)
     if not check_session:
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
 
-
-    start_col_exist = do_database_fetchone(f'SELECT start FROM attendee WHERE start IN (SELECT name FROM pragma_table_info(attendee))')
+    start_col_exist = do_database_fetchone(
+        f'SELECT start FROM attendee WHERE start IN (SELECT name FROM pragma_table_info(attendee))')
     if not start_col_exist:
         do_database_execute(f'ALTER TABLE attendee ADD start INT')
     do_database_execute(f'UPDATE attendee SET start = class.start FROM class WHERE attendee.classid = class.classid')
 
-    class_ids = format_my_returns(do_database_fetchall(f'SELECT classid FROM attendee WHERE userid = {iuser} ORDER BY start'))
-    statuses = format_my_returns(do_database_fetchall(f'SELECT status FROM attendee WHERE userid = {iuser} ORDER BY start'))
+    class_ids = format_my_returns(
+        do_database_fetchall(f'SELECT classid FROM attendee WHERE userid = {iuser} ORDER BY start'))
+    statuses = format_my_returns(
+        do_database_fetchall(f'SELECT status FROM attendee WHERE userid = {iuser} ORDER BY start'))
     skill_ids, start_dates, trainer_ids = get_skillids_start_trainerids(class_ids)
     skill_names = get_skill_names(skill_ids)
     trainer_names = get_trainer_names(trainer_ids)
-    states = get_states_of_users(statuses)
 
-    indices_to_skip = []
-    user_is_trainer = do_database_fetchall(f'SELECT trainerid, skillid FROM trainer WHERE trainerid = {iuser}')
-    for i in range(len(class_ids)):
-        if states[i] in ["cancelled", "removed"]:
-            indices_to_skip.append(i)
-        elif states[i] == 'enrolled':
+    skill_ids_passed_or_enrolled = []
+    for i, id in enumerate(skill_ids):
+        action = None
+        if statuses[i] == 1:
+            action = 'passed'
+            user_is_trainer = do_database_fetchone(f'Select * From trainer Where skillid = {id} and trainerid = {iuser}')
+            if user_is_trainer:
+                action = 'trainer'
+            skill_ids_passed_or_enrolled.append(id)
+        elif statuses[i] == 0:
             if int(start_dates[i]) >= int(time.time()):
-                states[i] = "scheduled"
-            elif int(start_dates[i]) < int(time.time()):
-                states[i] = "pending"
-        for row_trainer in user_is_trainer:
-            s_id = row_trainer[1]
-            if s_id == skill_ids[i]:
-                states[i] = "trainer"
+                action = 'scheduled'
+            else:
+                action = 'pending'
+            skill_ids_passed_or_enrolled.append(id)
+        if action:
+            response.append(build_response_skill(id, skill_names[i], start_dates[i], trainer_names[i], action))
 
-    for i in range(len(class_ids)):
-        if i in indices_to_skip:
-            continue
-        response.append(build_response_skill(skill_ids[i], skill_names[i], start_dates[i], trainer_names[i], states[i]))
+    for i, id in enumerate(skill_ids):
+        if statuses[i] == 2 and id not in skill_ids_passed_or_enrolled:
+            response.append(build_response_skill(id, skill_names[i], start_dates[i], trainer_names[i], 'failed'))
 
-    # Todo:
-    #  You have to arrange the responses according to the state and date as shown in the pdf
-    #  Also check all the checks here
     response.append(build_response_message(0, 'Skills list provided.'))
     return [iuser, imagic, response]
 
@@ -304,7 +302,8 @@ def handle_get_my_skills_request(iuser, imagic):
 def get_class_size_max_size_notes(class_ids):
     if isinstance(class_ids, int):
         note = do_database_fetchone(f'SELECT note FROM class WHERE classid = {class_ids}')[0]
-        c_size = len(do_database_fetchall(f'SELECT userid FROM attendee WHERE classid = {class_ids} AND status != 3 And status != 4'))
+        c_size = len(do_database_fetchall(
+            f'SELECT userid FROM attendee WHERE classid = {class_ids} AND status != 3 And status != 4'))
         m_size = do_database_fetchone(f'SELECT max FROM class WHERE classid = {class_ids}')[0]
         return c_size, m_size, note
     notes = []
@@ -313,14 +312,15 @@ def get_class_size_max_size_notes(class_ids):
     for id in class_ids:
         note = do_database_fetchone(f'SELECT note FROM class WHERE classid = {id}')[0]
         notes.append(note)
-        c_size = len(do_database_fetchall(f'SELECT userid FROM attendee WHERE classid = {id} AND status != 3 And status != 4'))
+        c_size = len(
+            do_database_fetchall(f'SELECT userid FROM attendee WHERE classid = {id} AND status != 3 And status != 4'))
         class_sizes.append(c_size)
         m_size = do_database_fetchone(f'SELECT max FROM class WHERE classid = {id}')[0]
         max_sizes.append(m_size)
     return class_sizes, max_sizes, notes
 
 
-def get_actions(class_ids, class_sizes, iuser, max_sizes, skill_ids):
+def get_actions_for_upcoming(class_ids, class_sizes, iuser, max_sizes, skill_ids):
     actions = ['join' for _ in range(len(class_ids))]
     for i, id in enumerate(class_ids):
         user_status = do_database_fetchall(f'Select status From attendee Where userid = {iuser} And classid = {id}')
@@ -364,7 +364,7 @@ def handle_get_upcoming_request(iuser, imagic):
     skill_names = get_skill_names(skill_ids)
     trainer_names = get_trainer_names(trainer_ids)
     class_sizes, max_sizes, notes = get_class_size_max_size_notes(class_ids)
-    actions = get_actions(class_ids, class_sizes, iuser, max_sizes, skill_ids)
+    actions = get_actions_for_upcoming(class_ids, class_sizes, iuser, max_sizes, skill_ids)
 
     for i in range(len(class_ids)):
         if int(start[i]) <= int(time.time()):
@@ -372,7 +372,6 @@ def handle_get_upcoming_request(iuser, imagic):
         response.append(
             build_response_class(class_ids[i], skill_names[i], trainer_names[i], start[i], notes[i], class_sizes[i],
                                  max_sizes[i], actions[i]))
-
 
     response.append(build_response_message(0, 'Upcoming class list provided.'))
     return [iuser, imagic, response]
@@ -440,9 +439,6 @@ def handle_get_class_detail_request(iuser, imagic, content):
     for i in range(len(attendeee_ids)):
         response.append(build_response_attendee(attendeee_ids[i], names[i], states[i]))
 
-    # Todo:
-    #  - check all checks in here
-    #  - refactor
     return [iuser, imagic, response]
 
 
@@ -658,7 +654,6 @@ def handle_create_class_request(iuser, imagic, content):
             build_response_message(260, 'Cannot create class: User is not a listed trainer for this skill.'))
 
     skill_name = get_skill_names(skill_id)
-
     if not skill_name:
         response.append(build_response_message(261, 'Cannot create class: Skill not listed in database.'))
         return [iuser, imagic, response]
