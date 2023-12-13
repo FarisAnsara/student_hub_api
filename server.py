@@ -301,21 +301,21 @@ def handle_get_my_skills_request(iuser, imagic):
 
 def get_class_size_max_size_notes(class_ids):
     if isinstance(class_ids, int):
-        note = do_database_fetchone(f'SELECT note FROM class WHERE classid = {class_ids}')[0]
+        note = do_database_fetchone(f'Select note From class Where classid = {class_ids}')[0]
         c_size = len(do_database_fetchall(
-            f'SELECT userid FROM attendee WHERE classid = {class_ids} AND status != 3 And status != 4'))
-        m_size = do_database_fetchone(f'SELECT max FROM class WHERE classid = {class_ids}')[0]
+            f'Select userid From attendee Where classid = {class_ids} And status != 3 And status != 4'))
+        m_size = do_database_fetchone(f'Select max From class Where classid = {class_ids}')[0]
         return c_size, m_size, note
     notes = []
     class_sizes = []
     max_sizes = []
     for id in class_ids:
-        note = do_database_fetchone(f'SELECT note FROM class WHERE classid = {id}')[0]
+        note = do_database_fetchone(f'Select note From class Where classid = {id}')[0]
         notes.append(note)
         c_size = len(
-            do_database_fetchall(f'SELECT userid FROM attendee WHERE classid = {id} AND status != 3 And status != 4'))
+            do_database_fetchall(f'Select userid From attendee Where classid = {id} And status != 3 And status != 4'))
         class_sizes.append(c_size)
-        m_size = do_database_fetchone(f'SELECT max FROM class WHERE classid = {id}')[0]
+        m_size = do_database_fetchone(f'Select max From class Where classid = {id}')[0]
         max_sizes.append(m_size)
     return class_sizes, max_sizes, notes
 
@@ -332,7 +332,7 @@ def get_actions_for_upcoming(class_ids, class_sizes, iuser, max_sizes, skill_ids
                 if status[0] == 4:
                     actions[i] = 'unavailable'
         user_has_skill = do_database_fetchone(
-            f'SELECT attendee.* FROM attendee JOIN class ON attendee.classid = class.classid WHERE attendee.userid = {iuser} AND (attendee.status = 1 OR attendee.status = 0) AND class.skillid = {skill_ids[i]} AND attendee.classid != {id}')
+            f'Select attendee.* From attendee Join class On attendee.classid = class.classid Where attendee.userid = {iuser} And (attendee.status = 1 Or attendee.status = 0) And class.skillid = {skill_ids[i]} And attendee.classid != {id}')
         if user_has_skill:
             actions[i] = 'unavailable'
         is_user_trainer_for_skill = do_database_fetchone(
@@ -359,7 +359,7 @@ def handle_get_upcoming_request(iuser, imagic):
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
 
-    class_ids = format_my_returns(do_database_fetchall(f'SELECT classid FROM class ORDER BY start'))
+    class_ids = format_my_returns(do_database_fetchall(f'Select classid From class Order By start'))
     skill_ids, start, trainer_ids = get_skillids_start_trainerids(class_ids)
     skill_names = get_skill_names(skill_ids)
     trainer_names = get_trainer_names(trainer_ids)
@@ -462,16 +462,16 @@ def handle_join_class_request(iuser, imagic, content):
         response.append(build_response_message(221, 'Cannot join class: User is trainer so cannot join class.'))
         return [iuser, imagic, response]
     user_already_in_class = do_database_fetchone(
-        f'Select * From attendee Where userid = {iuser} and classid = {class_id} and status = 0')
+        f'Select * From attendee Where userid = {iuser} And classid = {class_id} And status = 0')
     if user_already_in_class:
         response.append(build_response_message(222, 'Cannot join class: User already enrolled in class.'))
         return [iuser, imagic, response]
     user_already_passed_class = do_database_fetchone(
-        f'Select * From attendee Where userid = {iuser} and classid = {class_id} and status = 1')
+        f'Select * From attendee Where userid = {iuser} And classid = {class_id} And status = 1')
     if user_already_passed_class:
         response.append(build_response_message(223, 'Cannot join class: User already passed class.'))
     user_has_skill = do_database_fetchone(
-        f'SELECT attendee.* FROM attendee JOIN class ON attendee.classid = class.classid WHERE attendee.userid = {iuser} AND (attendee.status = 1 OR attendee.status = 0) AND class.skillid = {skill_id} AND attendee.classid != {class_id}')
+        f'Select attendee.* From attendee Join class On attendee.classid = class.classid Where attendee.userid = {iuser} And (attendee.status = 1 Or attendee.status = 0) And class.skillid = {skill_id} And attendee.classid != {class_id}')
     if user_has_skill:
         response.append(build_response_message(224, 'Cannot join class: User already has this skill or enrolled in a '
                                                     'class for this skill'))
@@ -490,9 +490,9 @@ def handle_join_class_request(iuser, imagic, content):
         response.append(build_response_message(227, 'Cannot join class: User is listed as a trainer for this skill'))
 
     user_has_left = do_database_fetchone(
-        f'Select * From attendee WHERE classid = {class_id} and userid = {iuser} and status = 3')
+        f'Select * From attendee Where classid = {class_id} and userid = {iuser} And status = 3')
     if user_has_left:
-        do_database_execute(f'UPDATE attendee SET status = 0 WHERE userid = {iuser} AND classid = {class_id}')
+        do_database_execute(f'Update attendee Set status = 0 Where userid = {iuser} And classid = {class_id}')
     else:
         do_database_execute(f'Insert Into attendee (userid, classid, status) Values ({iuser}, {class_id}, 0)')
 
@@ -519,17 +519,17 @@ def handle_leave_class_request(iuser, imagic, content):
     skill_name = get_skill_names(skill_id)
     trainer_name = get_trainer_names(trainer_id)
     class_size, max_size, note = get_class_size_max_size_notes(class_id)
-    user_enrolled = do_database_fetchone(f'Select * From attendee Where userid = {iuser} and classid = {class_id}')
+    user_enrolled = do_database_fetchone(f'Select * From attendee Where userid = {iuser} And classid = {class_id}')
     if not user_enrolled:
         response.append(build_response_message(230, 'Cannot leave class: User not enrolled in class'))
         return [iuser, imagic, response]
     user_cancelled = do_database_fetchone(
-        f'Select * From attendee Where userid = {iuser} and status = 3 and classid = {class_id}')
+        f'Select * From attendee Where userid = {iuser} And status = 3 And classid = {class_id}')
     if user_cancelled:
         response.append(build_response_message(231, 'Cannot leave class: User already left class'))
         return [iuser, imagic, response]
     user_removed = do_database_fetchone(
-        f'Select * From attendee Where userid = {iuser} and status = 4 and classid = {class_id}')
+        f'Select * From attendee Where userid = {iuser} And status = 4 And classid = {class_id}')
     if user_removed:
         response.append(build_response_message(232, 'Cannot leave class: User has been removed from class'))
         return [iuser, imagic, response]
@@ -540,7 +540,7 @@ def handle_leave_class_request(iuser, imagic, content):
         response.append(build_response_message(231, 'Cannot leave class: Class has already started'))
         return [iuser, imagic, response]
 
-    do_database_execute(f'UPDATE attendee SET status = 3 WHERE userid = {iuser} AND classid = {class_id}')
+    do_database_execute(f'Update attendee Set status = 3 Where userid = {iuser} And classid = {class_id}')
     response.append(
         build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size - 1, max_size, 'join'))
     response.append(build_response_message(0, 'Successfully left class'))
@@ -677,7 +677,7 @@ def handle_create_class_request(iuser, imagic, content):
         return [iuser, imagic, response]
 
     class_id = do_database_execute(
-        f'Insert into class (trainerid, skillid, start, max, note) VALUES ({iuser},{skill_id},{start_date},{max_students},"{note}")',
+        f'Insert into class (trainerid, skillid, start, max, note) Values ({iuser},{skill_id},{start_date},{max_students},"{note}")',
         get_primary_key=True)
     class_size = 0
 
