@@ -15,9 +15,6 @@ from http.server import BaseHTTPRequestHandler, HTTPServer  # the heavy lifting 
 import urllib  # some url parsing support
 import json  # support for json encoding
 import sys  # needed for agument handling
-import time  # time support
-
-import base64  # some encoding support
 import sqlite3  # sql database
 import random  # generate random numbers
 import time  # needed to record when stuff happened
@@ -33,16 +30,20 @@ def random_digits(n):
 
 # The following three functions issue SQL queries to the database.
 
-def do_database_execute(op):
+def do_database_execute(op, get_primary_key=False):
     """Execute an sqlite3 SQL query to database.db that does not expect a response."""
     print(op)
     try:
         db = sqlite3.connect('database.db')
         cursor = db.cursor()
-        cursor.execute(*op)
+        cursor.execute(op)
         db.commit()
+        generated_key = cursor.lastrowid
+        print("created")
+        return generated_key if get_primary_key else None
     except Exception as e:
         db.rollback()
+        print(f"Error: {e}")
     finally:
         db.close()
 
@@ -111,22 +112,51 @@ def build_response_redirect(where):
     return {"type": "redirect", "where": where}
 
 
-# The following handle_..._request functions are invoked by the corresponding /action?command=.. request
+def check_if_session_valid(imagic, iuser):
+    # Todo: check this function working
+    magic_current = do_database_fetchone(f'SELECT magic FROM session WHERE userid = {iuser}')
+    if not magic_current:
+        return True
+    return magic_current[0] == imagic
 
+
+def get_userid(username):
+    userid = do_database_fetchone(f'SELECT userid FROM users WHERE username = "{username}"')
+    return userid
+
+
+def check_password_for_username(username, password):
+    res = do_database_fetchone(f'SELECT password FROM users WHERE username = "{username}"')[0]
+    return res == password
+
+
+# The following handle_..._request functions are invoked by the corresponding /action?command=.. request
 def handle_login_request(iuser, imagic, content):
     """A user has supplied a username and password. Check if these are
        valid and if so, create a suitable session record in the database
        with a random magic identifier that is returned.
        Return the username, magic identifier and the response action set."""
-    # content contains the username and password
-    # imagic and iuser are empty on input
-    rows = do_database_fetchone('SELECT username FROM users')
-    print(rows)
-
+    username = content['username']
+    password = content['password']
     response = []
-
-## Add code here
-
+    if not username:
+        response.append(build_response_message(100, 'Please provide a username.'))
+        return [iuser, imagic, response]
+    if not password:
+        response.append(build_response_message(101, 'Please provide a password.'))
+        return [iuser, imagic, response]
+    userid = get_userid(username)
+    if not userid:
+        response.append(build_response_message(200, 'Username: ' + username + ' does not exist.'))
+        return [iuser, imagic, response]
+    iuser = userid[0]
+    if not check_password_for_username(username, password):
+        response.append(build_response_message(201, 'Incorrect password.'))
+        return [iuser, imagic, response]
+    imagic = random_digits(10)
+    do_database_execute(f'DELETE FROM session WHERE userid = "{iuser}"')
+    do_database_execute(f'INSERT INTO session (userid, magic) VALUES ({iuser},{imagic})')
+    response.append({"type": "redirect", "where": "\index.html"})
     return [iuser, imagic, response]
 
 
@@ -135,14 +165,88 @@ def handle_logout_request(iuser, imagic, parameters):
        You will     print(content)
     need to ensure the end of the session is recorded in the database
         And that the session magic is revoked."""
-
     response = []
-    # set iuser = null
-    # response = redirect to login page
-
-    ## Add code here
-
+    check_session = check_if_session_valid(imagic, iuser)
+    if not check_session:
+        response.append({"type": "redirect", "where": "/login.html"})
+        return [iuser, imagic, response]
+    do_database_execute(f'Delete From session Where userid = {iuser}')
+    response.append({"type": "redirect", "where": "/logout.html"})
     return [iuser, imagic, response]
+
+
+def format_my_returns(tuple_in):
+    out = []
+    for val in tuple_in:
+        out.append(val[0])
+    return tuple(out)
+
+
+def get_states_of_users(statuses):
+    states = []
+    for status in statuses:
+        match (status):
+            case 0:
+                states.append("enrolled")
+            case 1:
+                states.append("passed")
+            case 2:
+                states.append("failed")
+            case 3:
+                states.append("cancelled")
+            case 4:
+                states.append("removed")
+            case other:
+                states.append(None)
+    return states
+
+
+def get_trainer_names(trainer_ids):
+    if isinstance(trainer_ids, int):
+        name = do_database_fetchone(f'SELECT fullname FROM users WHERE userid = {trainer_ids}')
+        if name:
+            return name[0]
+        return None
+    trainer_names = []
+    for id in trainer_ids:
+        name = do_database_fetchone(f'SELECT fullname FROM users WHERE userid = {id}')
+        if name:
+            trainer_names.append(name[0])
+    return trainer_names
+
+
+def get_skill_names(skill_ids):
+    if isinstance(skill_ids, int):
+        skill = do_database_fetchone(f'SELECT name FROM skill WHERE skillid = {skill_ids}')
+        if skill:
+            return skill[0]
+        return None
+    skills = []
+    for val in skill_ids:
+        skill = do_database_fetchone(f'SELECT name FROM skill WHERE skillid = {val}')
+        if skill:
+            skills.append(skill[0])
+    return skills
+
+
+def get_skillids_start_trainerids(class_ids):
+    skill_ids = []
+    trainer_ids = []
+    start_dates = []
+    if isinstance(class_ids, int):
+        out = do_database_fetchone(f'SELECT skillid, start, trainerid FROM class WHERE classid = {class_ids}')
+        if out:
+            skill_ids = out[0]
+            start_dates = out[1]
+            trainer_ids = out[2]
+        return skill_ids, start_dates, trainer_ids
+    for id in class_ids:
+        out = do_database_fetchone(f'SELECT skillid, trainerid, start FROM class WHERE classid = {id}')
+        if out:
+            skill_ids.append(out[0])
+            trainer_ids.append(out[1])
+            start_dates.append(out[2])
+    return skill_ids, start_dates, trainer_ids
 
 
 def handle_get_my_skills_request(iuser, imagic):
@@ -150,31 +254,190 @@ def handle_get_my_skills_request(iuser, imagic):
        You must return a value for all vehicle types, even when it's zero."""
 
     response = []
-    #
+    check_session = check_if_session_valid(imagic, iuser)
+    if not check_session:
+        response.append({"type": "redirect", "where": "/login.html"})
+        return [iuser, imagic, response]
 
-    ## Add code here
+    start_col_exist = do_database_fetchone(
+        f'SELECT start FROM attendee WHERE start IN (SELECT name FROM pragma_table_info(attendee))')
+    if not start_col_exist:
+        do_database_execute(f'ALTER TABLE attendee ADD start INT')
+    do_database_execute(f'UPDATE attendee SET start = class.start FROM class WHERE attendee.classid = class.classid')
 
+    class_ids = format_my_returns(
+        do_database_fetchall(f'SELECT classid FROM attendee WHERE userid = {iuser} ORDER BY start'))
+    statuses = format_my_returns(
+        do_database_fetchall(f'SELECT status FROM attendee WHERE userid = {iuser} ORDER BY start'))
+    skill_ids, start_dates, trainer_ids = get_skillids_start_trainerids(class_ids)
+    skill_names = get_skill_names(skill_ids)
+    trainer_names = get_trainer_names(trainer_ids)
+
+    skill_ids_passed_or_enrolled = []
+    for i, id in enumerate(skill_ids):
+        action = None
+        if statuses[i] == 1:
+            action = 'passed'
+            user_is_trainer = do_database_fetchone(f'Select * From trainer Where skillid = {id} and trainerid = {iuser}')
+            if user_is_trainer:
+                action = 'trainer'
+            skill_ids_passed_or_enrolled.append(id)
+        elif statuses[i] == 0:
+            if int(start_dates[i]) >= int(time.time()):
+                action = 'scheduled'
+            else:
+                action = 'pending'
+            skill_ids_passed_or_enrolled.append(id)
+        if action:
+            response.append(build_response_skill(id, skill_names[i], start_dates[i], trainer_names[i], action))
+
+    for i, id in enumerate(skill_ids):
+        if statuses[i] == 2 and id not in skill_ids_passed_or_enrolled:
+            response.append(build_response_skill(id, skill_names[i], start_dates[i], trainer_names[i], 'failed'))
+
+    response.append(build_response_message(0, 'Skills list provided.'))
     return [iuser, imagic, response]
+
+
+def get_class_size_max_size_notes(class_ids):
+    if isinstance(class_ids, int):
+        note = do_database_fetchone(f'Select note From class Where classid = {class_ids}')[0]
+        c_size = len(do_database_fetchall(
+            f'Select userid From attendee Where classid = {class_ids} And status != 3 And status != 4'))
+        m_size = do_database_fetchone(f'Select max From class Where classid = {class_ids}')[0]
+        return c_size, m_size, note
+    notes = []
+    class_sizes = []
+    max_sizes = []
+    for id in class_ids:
+        note = do_database_fetchone(f'Select note From class Where classid = {id}')[0]
+        notes.append(note)
+        c_size = len(
+            do_database_fetchall(f'Select userid From attendee Where classid = {id} And status != 3 And status != 4'))
+        class_sizes.append(c_size)
+        m_size = do_database_fetchone(f'Select max From class Where classid = {id}')[0]
+        max_sizes.append(m_size)
+    return class_sizes, max_sizes, notes
+
+
+def get_actions_for_upcoming(class_ids, class_sizes, iuser, max_sizes, skill_ids):
+    actions = ['join' for _ in range(len(class_ids))]
+    for i, id in enumerate(class_ids):
+        user_status = do_database_fetchall(f'Select status From attendee Where userid = {iuser} And classid = {id}')
+        print('user statuses = ', user_status)
+        if user_status:
+            for status in user_status:
+                if status[0] == 0:
+                    actions[i] = 'leave'
+                if status[0] == 4:
+                    actions[i] = 'unavailable'
+        user_has_skill = do_database_fetchone(
+            f'Select attendee.* From attendee Join class On attendee.classid = class.classid Where attendee.userid = {iuser} And (attendee.status = 1 Or attendee.status = 0) And class.skillid = {skill_ids[i]} And attendee.classid != {id}')
+        if user_has_skill:
+            actions[i] = 'unavailable'
+        is_user_trainer_for_skill = do_database_fetchone(
+            f'Select * From trainer Where trainerid = {iuser} and skillid = {skill_ids[i]}')
+        if is_user_trainer_for_skill:
+            actions[i] = 'unavailable'
+        is_user_trainer = do_database_fetchone(f'Select * From class Where classid = {id} And trainerid = {iuser}')
+        if is_user_trainer:
+            actions[i] = 'edit'
+        if class_sizes[i] == max_sizes[i]:
+            actions[i] = 'unavailable'
+        if max_sizes[i] == 0:
+            actions[i] = 'cancelled'
+    return actions
 
 
 def handle_get_upcoming_request(iuser, imagic):
     """This code handles a request for the details of a class.
        """
-
     response = []
+    check_session = check_if_session_valid(imagic, iuser)
 
-    ## Add code here
+    if not check_session:
+        response.append({"type": "redirect", "where": "/login.html"})
+        return [iuser, imagic, response]
 
+    class_ids = format_my_returns(do_database_fetchall(f'Select classid From class Order By start'))
+    skill_ids, start, trainer_ids = get_skillids_start_trainerids(class_ids)
+    skill_names = get_skill_names(skill_ids)
+    trainer_names = get_trainer_names(trainer_ids)
+    class_sizes, max_sizes, notes = get_class_size_max_size_notes(class_ids)
+    actions = get_actions_for_upcoming(class_ids, class_sizes, iuser, max_sizes, skill_ids)
+
+    for i in range(len(class_ids)):
+        if int(start[i]) <= int(time.time()):
+            continue
+        response.append(
+            build_response_class(class_ids[i], skill_names[i], trainer_names[i], start[i], notes[i], class_sizes[i],
+                                 max_sizes[i], actions[i]))
+
+    response.append(build_response_message(0, 'Upcoming class list provided.'))
     return [iuser, imagic, response]
 
 
 def handle_get_class_detail_request(iuser, imagic, content):
     """This code handles a request for a list of upcoming classes.
        """
-
     response = []
+    check_session = check_if_session_valid(imagic, iuser)
+    if not check_session:
+        response.append({"type": "redirect", "where": "/login.html"})
+        return [iuser, imagic, response]
 
-    ## Add code here
+    class_id = content['id']
+    skill_id, start_date, trainer_id = get_skillids_start_trainerids(class_id)
+    if str(iuser) != str(trainer_id):
+        print("iuser: ", iuser)
+        print('trainer_id: ', trainer_id)
+        response.append(build_response_message(210, 'Cannot show class: User has to be a trainer'))
+        return [iuser, imagic, response]
+
+    skill_name = get_skill_names(skill_id)
+
+    attendee_id_user_ids_statuses = do_database_fetchall(
+        f'Select attendeeid, userid, status From attendee Where classid = {class_id}')
+    attendeee_ids = []
+    user_ids = []
+    statuses = []
+    for row in attendee_id_user_ids_statuses:
+        attendeee_ids.append(row[0])
+        user_ids.append(row[1])
+        statuses.append(row[2])
+    names = []
+    for id in user_ids:
+        name = do_database_fetchone(f'Select fullname From users Where userid = {id}')
+        names.append(name)
+
+    states = []
+    for status in statuses:
+        if status == 0:
+            if int(start_date) >= int(time.time()):
+                states.append('remove')
+            else:
+                states.append('update')
+        elif status == 1:
+            states.append('passed')
+        elif status == 2:
+            states.append('failed')
+        elif status == 3:
+            states.append('cancelled')
+
+    trainer_name = get_trainer_names(trainer_id)
+    class_size, max_size, note = get_class_size_max_size_notes(class_id)
+
+    if max_size == 0:
+        action = 'cancelled'
+    else:
+        action = 'cancel'
+
+    response.append(
+        build_response_class(class_id, skill_name, trainer_name, note, start_date, class_size,
+                             max_size, action))
+
+    for i in range(len(attendeee_ids)):
+        response.append(build_response_attendee(attendeee_ids[i], names[i], states[i]))
 
     return [iuser, imagic, response]
 
@@ -183,8 +446,62 @@ def handle_join_class_request(iuser, imagic, content):
     """This code handles a request by a user to join a class.
       """
     response = []
+    check_session = check_if_session_valid(imagic, iuser)
+    if not check_session:
+        response.append({"type": "redirect", "where": "/login.html"})
+        return [iuser, imagic, response]
+    class_id = content['id']
+    skill_id, start_date, trainer_id = get_skillids_start_trainerids(class_id)
+    skill_name = get_skill_names(skill_id)
+    trainer_name = get_trainer_names(trainer_id)
+    class_size, max_size, note = get_class_size_max_size_notes(class_id)
+    if class_size == max_size:
+        response.append(build_response_message(220, 'Cannot join class: Class is full'))
+        return [iuser, imagic, response]
+    if trainer_id == iuser:
+        response.append(build_response_message(221, 'Cannot join class: User is trainer so cannot join class.'))
+        return [iuser, imagic, response]
+    user_already_in_class = do_database_fetchone(
+        f'Select * From attendee Where userid = {iuser} And classid = {class_id} And status = 0')
+    if user_already_in_class:
+        response.append(build_response_message(222, 'Cannot join class: User already enrolled in class.'))
+        return [iuser, imagic, response]
+    user_already_passed_class = do_database_fetchone(
+        f'Select * From attendee Where userid = {iuser} And classid = {class_id} And status = 1')
+    if user_already_passed_class:
+        response.append(build_response_message(223, 'Cannot join class: User already passed class.'))
+    user_has_skill = do_database_fetchone(
+        f'Select attendee.* From attendee Join class On attendee.classid = class.classid Where attendee.userid = {iuser} And (attendee.status = 1 Or attendee.status = 0) And class.skillid = {skill_id} And attendee.classid != {class_id}')
+    if user_has_skill:
+        response.append(build_response_message(224, 'Cannot join class: User already has this skill or enrolled in a '
+                                                    'class for this skill'))
+        return [iuser, imagic, response]
+    if max_size == 0:
+        response.append(build_response_message(225, 'Cannot join class: This class has been cancelled by the trainer'))
+        return [iuser, imagic, response]
+    user_has_been_removed = do_database_fetchone(
+        f'Select * From attendee Where userid = {iuser} and classid = {class_id} and status = 4')
+    if user_has_been_removed:
+        response.append(build_response_message(226, 'Cannot join class: User has been removed from this class, '
+                                                    'so cannot rejoin'))
+        return [iuser, imagic, response]
+    is_user_trainer_for_skill = do_database_fetchone(f'Select * From trainer Where trainerid = {iuser}')
+    if is_user_trainer_for_skill:
+        response.append(build_response_message(227, 'Cannot join class: User is listed as a trainer for this skill'))
 
-    ## Add code here
+    user_has_left = do_database_fetchone(
+        f'Select * From attendee Where classid = {class_id} and userid = {iuser} And status = 3')
+    if user_has_left:
+        do_database_execute(f'Update attendee Set status = 0 Where userid = {iuser} And classid = {class_id}')
+    else:
+        do_database_execute(f'Insert Into attendee (userid, classid, status) Values ({iuser}, {class_id}, 0)')
+
+    response.append(
+        build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size + 1, max_size, 'leave')
+    )
+    response.append(
+        build_response_message(0, "Successfully joined class.")
+    )
 
     return [iuser, imagic, response]
 
@@ -193,9 +510,40 @@ def handle_leave_class_request(iuser, imagic, content):
     """This code handles a request by a user to leave a class.
     """
     response = []
+    check_session = check_if_session_valid(imagic, iuser)
+    if not check_session:
+        response.append({"type": "redirect", "where": "/login.html"})
+        return [iuser, imagic, response]
+    class_id = content['id']
+    skill_id, start_date, trainer_id = get_skillids_start_trainerids(class_id)
+    skill_name = get_skill_names(skill_id)
+    trainer_name = get_trainer_names(trainer_id)
+    class_size, max_size, note = get_class_size_max_size_notes(class_id)
+    user_enrolled = do_database_fetchone(f'Select * From attendee Where userid = {iuser} And classid = {class_id}')
+    if not user_enrolled:
+        response.append(build_response_message(230, 'Cannot leave class: User not enrolled in class'))
+        return [iuser, imagic, response]
+    user_cancelled = do_database_fetchone(
+        f'Select * From attendee Where userid = {iuser} And status = 3 And classid = {class_id}')
+    if user_cancelled:
+        response.append(build_response_message(231, 'Cannot leave class: User already left class'))
+        return [iuser, imagic, response]
+    user_removed = do_database_fetchone(
+        f'Select * From attendee Where userid = {iuser} And status = 4 And classid = {class_id}')
+    if user_removed:
+        response.append(build_response_message(232, 'Cannot leave class: User has been removed from class'))
+        return [iuser, imagic, response]
+    if trainer_id == iuser:
+        response.append(build_response_message(233, "Cannot leave class: user is the trainer of this class"))
+        return [iuser, imagic, response]
+    if int(start_date) <= int(time.time()):
+        response.append(build_response_message(231, 'Cannot leave class: Class has already started'))
+        return [iuser, imagic, response]
 
-    ## Add code here
-
+    do_database_execute(f'Update attendee Set status = 3 Where userid = {iuser} And classid = {class_id}')
+    response.append(
+        build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size - 1, max_size, 'join'))
+    response.append(build_response_message(0, 'Successfully left class'))
     return [iuser, imagic, response]
 
 
@@ -203,8 +551,42 @@ def handle_cancel_class_request(iuser, imagic, content):
     """This code handles a request to cancel an entire class."""
 
     response = []
+    check_session = check_if_session_valid(imagic, iuser)
+    if not check_session:
+        response.append({"type": "redirect", "where": "/login.html"})
+        return [iuser, imagic, response]
 
-    ## Add code here
+    class_id = content['id']
+    skill_id, start_date, trainer_id = get_skillids_start_trainerids(class_id)
+    if str(iuser) != str(trainer_id):
+        response.append(build_response_message(240,
+                                               'Cannot cancel class: User has to be the registered trainer in order to cancel a class'))
+        return [iuser, imagic, response]
+
+    do_database_execute(f'Update class Set max = 0 Where classid = {class_id}')
+    class_size, max_size, note = get_class_size_max_size_notes(class_id)
+    skill_name = get_skill_names(skill_id)
+    trainer_name = get_trainer_names(trainer_id)
+    max_size = 0
+    response.append(
+        build_response_class(class_id, skill_name, trainer_name, note, start_date, class_size, max_size, 'cancelled'))
+
+    attendee_ids = do_database_fetchall(f'Select attendeeid From attendee Where classid = {class_id}')
+    if attendee_ids:
+        for user in attendee_ids:
+            is_enrolled = do_database_fetchone(f'Select * From attendee Where attendeeid = {user[0]} and status = 0')
+            if is_enrolled:
+                do_database_execute(f'Update attendee Set status = 3 Where attendeeid = {user[0]}')
+        user_ids = do_database_fetchall(f'Select userid From attendee Where classid = {class_id}')
+        names = []
+        for id in user_ids:
+            name = do_database_fetchone(f'Select fullname From users Where userid = {id[0]}')
+            names.append(name)
+
+        for i in range(len(attendee_ids)):
+            response.append(build_response_attendee(attendee_ids[i], names[i], "cancelled"))
+
+    response.append(build_response_message(0, 'Cancelled class successfully'))
 
     return [iuser, imagic, response]
 
@@ -213,8 +595,42 @@ def handle_update_attendee_request(iuser, imagic, content):
     """This code handles a request to cancel a user attendance at a class by a trainer"""
 
     response = []
+    check_session = check_if_session_valid(imagic, iuser)
+    if not check_session:
+        response.append({"type": "redirect", "where": "/login.html"})
+        return [iuser, imagic, response]
 
-    ## Add code here
+    attendee_id = content['id']
+    state_input = content['state']
+    attendee_user_id = do_database_fetchone(f'Select userid From attendee Where attendeeid = {attendee_id}')
+    if not attendee_user_id:
+        response.append(
+            build_response_message(250, 'Cannot update attendee: Attendee deos not exist, deleted entry successfully.'))
+        do_database_execute(f'Delete from attendee Where attendeeid = {attendee_id}')
+        return [iuser, imagic, response]
+    name = do_database_fetchone(f'Select fullname From users Where userid = {attendee_user_id[0]}')
+    if not name:
+        response.append(
+            build_response_message(250, 'Cannot update attendee: Attendee deos not exist, deleted entry successfully.'))
+        do_database_execute(f'Delete from attendee Where attendeeid = {attendee_id}')
+        return [iuser, imagic, response]
+
+    if state_input == "pass":
+        new_state = 'passed'
+        status_table = 1
+    elif state_input == 'fail':
+        new_state = 'failed'
+        status_table = 2
+    elif state_input == 'remove':
+        new_state = 'removed'
+        status_table = 4
+    else:
+        response.append(
+            build_response_message(251, 'Cannot update attendee: Please input a valid new state (pass/fail/remove)'))
+        return [iuser, imagic, response]
+
+    do_database_execute(f'Update attendee Set status = {status_table} Where attendeeid = {attendee_id}')
+    response.append(build_response_attendee(attendee_id, name[0], new_state))
 
     return [iuser, imagic, response]
 
@@ -223,9 +639,52 @@ def handle_create_class_request(iuser, imagic, content):
     """This code handles a request to create a class."""
 
     response = []
+    skill_id = content['id']
+    day = content['day']
+    month = content['month']
+    year = content['year']
+    hour = content['hour']
+    minute = content['minute']
+    note = content['note']
+    max_students = content['max']
 
-    ## Add code here
+    is_trainer_for_skill = do_database_fetchone(f'Select * From trainer Where trainerid = {iuser}')
+    if not is_trainer_for_skill:
+        response.append(
+            build_response_message(260, 'Cannot create class: User is not a listed trainer for this skill.'))
 
+    skill_name = get_skill_names(skill_id)
+    if not skill_name:
+        response.append(build_response_message(261, 'Cannot create class: Skill not listed in database.'))
+        return [iuser, imagic, response]
+
+    trainer_name = get_trainer_names(iuser)
+
+    try:
+        start_date = int(datetime.datetime(year, month, day, hour, minute).timestamp())
+        print("Datetime created:", start_date)
+    except ValueError as e:
+        response.append(build_response_message(262, 'Cannot create class: Invalid Date or Time.'))
+        return [iuser, imagic, response]
+
+    if start_date < int(time.time()):
+        response.append(build_response_message(263, 'Cannot create class: start time must be in the future.'))
+        return [iuser, imagic, response]
+
+    if max_students > 10 or max_students < 1:
+        response.append(
+            build_response_message(264, 'Cannot create class: Max class size should be between 1-10 students.'))
+        return [iuser, imagic, response]
+
+    class_id = do_database_execute(
+        f'Insert into class (trainerid, skillid, start, max, note) Values ({iuser},{skill_id},{start_date},{max_students},"{note}")',
+        get_primary_key=True)
+    class_size = 0
+
+    response.append(
+        build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size, max_students, 'edit'))
+    response.append(build_response_redirect(f"/class/{class_id}"))
+    response.append(build_response_message(0, "Successfully created class."))
     return [iuser, imagic, response]
 
 
@@ -427,6 +886,7 @@ class myHTTPServer_RequestHandler(BaseHTTPRequestHandler):
 
         return
 
+
 def run():
     """This is the entry point function to this code."""
     print('starting server...')
@@ -442,10 +902,5 @@ def run():
     print('running server on port =', sys.argv[1], '...')
     httpd.serve_forever()  # This function will not return till the server is aborted
 
-do_database_execute('INSERT INTO users (userid, fullname, username, password) VALUES '
-                    '(1,"fares ansara", "3ans02", "password"), '
-                    '(2,"kareem sabanekh", "spinach02", "password"),'
-                    '(3,"laila badaro", "badaro03", "password")')
 
 run()
-
