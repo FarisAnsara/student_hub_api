@@ -113,7 +113,6 @@ def build_response_redirect(where):
 
 
 def check_if_session_valid(imagic, iuser):
-    # Todo: check this function working
     magic_current = do_database_fetchone(f'SELECT magic FROM session WHERE userid = {iuser}')
     if not magic_current:
         return True
@@ -121,11 +120,18 @@ def check_if_session_valid(imagic, iuser):
 
 
 def get_userid(username):
+    """
+    This function gets the userid for a username argument.
+    """
     userid = do_database_fetchone(f'SELECT userid FROM users WHERE username = "{username}"')
     return userid
 
 
 def check_password_for_username(username, password):
+    """
+    This function checks if the password argument is the same as that
+    stored in the database.
+    """
     res = do_database_fetchone(f'SELECT password FROM users WHERE username = "{username}"')[0]
     return res == password
 
