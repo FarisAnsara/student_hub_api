@@ -49,7 +49,9 @@ def do_database_execute(op, get_primary_key=False):
 
 
 def do_database_fetchone(op):
-    """Execute an sqlite3 SQL query to database.db that expects to extract a single row result. Note, it may be a null result."""
+    """
+    Execute an sqlite3 SQL query to database.db that expects to extract a single row result. Note, it may be a null result.
+    """
     print(op)
     try:
         db = sqlite3.connect('database.db')
@@ -65,7 +67,9 @@ def do_database_fetchone(op):
 
 
 def do_database_fetchall(op):
-    """Execute an sqlite3 SQL query to database.db that expects to extract a multi-row result. Note, it may be a null result."""
+    """
+    Execute an sqlite3 SQL query to database.db that expects to extract a multi-row result. Note, it may be a null result.
+    """
     print(op)
     try:
         db = sqlite3.connect('database.db')
@@ -192,6 +196,7 @@ def format_my_returns(tuple_in):
         out.append(val[0])
     return tuple(out)
 
+
 def get_trainer_names(trainer_ids):
     """
     This function returns the trainer names using the trainer id's argument.
@@ -202,8 +207,8 @@ def get_trainer_names(trainer_ids):
             return name[0]
         return None
     trainer_names = []
-    for id in trainer_ids:
-        name = do_database_fetchone(f'SELECT fullname FROM users WHERE userid = {id}')
+    for t_id in trainer_ids:
+        name = do_database_fetchone(f'SELECT fullname FROM users WHERE userid = {t_id}')
         if name:
             trainer_names.append(name[0])
     return trainer_names
@@ -219,8 +224,8 @@ def get_skill_names(skill_ids):
             return skill[0]
         return None
     skills = []
-    for val in skill_ids:
-        skill = do_database_fetchone(f'SELECT name FROM skill WHERE skillid = {val}')
+    for s_id in skill_ids:
+        skill = do_database_fetchone(f'SELECT name FROM skill WHERE skillid = {s_id}')
         if skill:
             skills.append(skill[0])
     return skills
@@ -241,8 +246,8 @@ def get_skillids_start_trainerids(class_ids):
             start_dates = out[1]
             trainer_ids = out[2]
         return skill_ids, start_dates, trainer_ids
-    for id in class_ids:
-        out = do_database_fetchone(f'SELECT skillid, trainerid, start FROM class WHERE classid = {id}')
+    for c_id in class_ids:
+        out = do_database_fetchone(f'SELECT skillid, trainerid, start FROM class WHERE classid = {c_id}')
         if out:
             skill_ids.append(out[0])
             trainer_ids.append(out[1])
@@ -275,26 +280,27 @@ def handle_get_my_skills_request(iuser, imagic):
     trainer_names = get_trainer_names(trainer_ids)
 
     skill_ids_passed_or_enrolled = []
-    for i, id in enumerate(skill_ids):
+    for i, s_id in enumerate(skill_ids):
         action = None
         if statuses[i] == 1:
             action = 'passed'
-            user_is_trainer = do_database_fetchone(f'Select * From trainer Where skillid = {id} and trainerid = {iuser}')
+            user_is_trainer = do_database_fetchone(
+                f'Select * From trainer Where skillid = {s_id} and trainerid = {iuser}')
             if user_is_trainer:
                 action = 'trainer'
-            skill_ids_passed_or_enrolled.append(id)
+            skill_ids_passed_or_enrolled.append(s_id)
         elif statuses[i] == 0:
             if int(start_dates[i]) >= int(time.time()):
                 action = 'scheduled'
             else:
                 action = 'pending'
-            skill_ids_passed_or_enrolled.append(id)
+            skill_ids_passed_or_enrolled.append(s_id)
         if action:
-            response.append(build_response_skill(id, skill_names[i], start_dates[i], trainer_names[i], action))
+            response.append(build_response_skill(s_id, skill_names[i], start_dates[i], trainer_names[i], action))
 
-    for i, id in enumerate(skill_ids):
-        if statuses[i] == 2 and id not in skill_ids_passed_or_enrolled:
-            response.append(build_response_skill(id, skill_names[i], start_dates[i], trainer_names[i], 'failed'))
+    for i, s_id in enumerate(skill_ids):
+        if statuses[i] == 2 and s_id not in skill_ids_passed_or_enrolled:
+            response.append(build_response_skill(s_id, skill_names[i], start_dates[i], trainer_names[i], 'failed'))
 
     response.append(build_response_message(0, 'Skills list provided.'))
     return [iuser, imagic, response]
@@ -314,13 +320,13 @@ def get_class_size_max_size_notes(class_ids):
     notes = []
     class_sizes = []
     max_sizes = []
-    for id in class_ids:
-        note = do_database_fetchone(f'Select note From class Where classid = {id}')[0]
+    for c_id in class_ids:
+        note = do_database_fetchone(f'Select note From class Where classid = {c_id}')[0]
         notes.append(note)
         c_size = len(
-            do_database_fetchall(f'Select userid From attendee Where classid = {id} And status != 3 And status != 4'))
+            do_database_fetchall(f'Select userid From attendee Where classid = {c_id} And status != 3 And status != 4'))
         class_sizes.append(c_size)
-        m_size = do_database_fetchone(f'Select max From class Where classid = {id}')[0]
+        m_size = do_database_fetchone(f'Select max From class Where classid = {c_id}')[0]
         max_sizes.append(m_size)
     return class_sizes, max_sizes, notes
 
@@ -331,8 +337,8 @@ def get_actions_for_upcoming(class_ids, class_sizes, iuser, max_sizes, skill_ids
     the upcoming training page.
     """
     actions = ['join' for _ in range(len(class_ids))]
-    for i, id in enumerate(class_ids):
-        user_status = do_database_fetchall(f'Select status From attendee Where userid = {iuser} And classid = {id}')
+    for i, c_id in enumerate(class_ids):
+        user_status = do_database_fetchall(f'Select status From attendee Where userid = {iuser} And classid = {c_id}')
         print('user statuses = ', user_status)
         if user_status:
             for status in user_status:
@@ -341,14 +347,14 @@ def get_actions_for_upcoming(class_ids, class_sizes, iuser, max_sizes, skill_ids
                 if status[0] == 4:
                     actions[i] = 'unavailable'
         user_has_skill = do_database_fetchone(
-            f'Select attendee.* From attendee Join class On attendee.classid = class.classid Where attendee.userid = {iuser} And (attendee.status = 1 Or attendee.status = 0) And class.skillid = {skill_ids[i]} And attendee.classid != {id}')
+            f'Select attendee.* From attendee Join class On attendee.classid = class.classid Where attendee.userid = {iuser} And (attendee.status = 1 Or attendee.status = 0) And class.skillid = {skill_ids[i]} And attendee.classid != {c_id}')
         if user_has_skill:
             actions[i] = 'unavailable'
         is_user_trainer_for_skill = do_database_fetchone(
             f'Select * From trainer Where trainerid = {iuser} and skillid = {skill_ids[i]}')
         if is_user_trainer_for_skill:
             actions[i] = 'unavailable'
-        is_user_trainer = do_database_fetchone(f'Select * From class Where classid = {id} And trainerid = {iuser}')
+        is_user_trainer = do_database_fetchone(f'Select * From class Where classid = {c_id} And trainerid = {iuser}')
         if is_user_trainer:
             actions[i] = 'edit'
         if class_sizes[i] == max_sizes[i]:
@@ -415,8 +421,8 @@ def handle_get_class_detail_request(iuser, imagic, content):
         user_ids.append(row[1])
         statuses.append(row[2])
     names = []
-    for id in user_ids:
-        name = do_database_fetchone(f'Select fullname From users Where userid = {id}')
+    for u_id in user_ids:
+        name = do_database_fetchone(f'Select fullname From users Where userid = {u_id}')
         names.append(name)
 
     states = []
@@ -588,8 +594,8 @@ def handle_cancel_class_request(iuser, imagic, content):
                 do_database_execute(f'Update attendee Set status = 3 Where attendeeid = {user[0]}')
         user_ids = do_database_fetchall(f'Select userid From attendee Where classid = {class_id}')
         names = []
-        for id in user_ids:
-            name = do_database_fetchone(f'Select fullname From users Where userid = {id[0]}')
+        for u_id in user_ids:
+            name = do_database_fetchone(f'Select fullname From users Where userid = {u_id[0]}')
             names.append(name)
 
         for i in range(len(attendee_ids)):
@@ -624,7 +630,7 @@ def handle_update_attendee_request(iuser, imagic, content):
         do_database_execute(f'Delete from attendee Where attendeeid = {attendee_id}')
         return [iuser, imagic, response]
 
-    if state_input == "pass":
+    if state_input == 'pass':
         new_state = 'passed'
         status_table = 1
     elif state_input == 'fail':

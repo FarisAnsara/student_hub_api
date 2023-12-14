@@ -24,7 +24,7 @@
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="HighlightingSettingsPerFile">
-    <setting file="file://$PROJECT_DIR$/server.py" root0="SKIP_INSPECTION" />
+    <setting file="file://$PROJECT_DIR$/server.py" root0="FORCE_HIGHLIGHTING" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
@@ -111,7 +111,8 @@
       <workItem from="1702402397325" duration="29000" />
       <workItem from="1702402428585" duration="1346000" />
       <workItem from="1702406061326" duration="11606000" />
-      <workItem from="1702564289729" duration="754000" />
+      <workItem from="1702564289729" duration="787000" />
+      <workItem from="1702565464524" duration="338000" />
     </task>
     <servers />
   </component>
