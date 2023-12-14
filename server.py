@@ -176,32 +176,20 @@ def handle_logout_request(iuser, imagic, parameters):
 
 
 def format_my_returns(tuple_in):
+    """
+    This function takes in a tuple from the fetchall function and
+    formats it so that it is not a tuple of tuples but a tuple of
+    values.
+    """
     out = []
     for val in tuple_in:
         out.append(val[0])
     return tuple(out)
 
-
-def get_states_of_users(statuses):
-    states = []
-    for status in statuses:
-        match (status):
-            case 0:
-                states.append("enrolled")
-            case 1:
-                states.append("passed")
-            case 2:
-                states.append("failed")
-            case 3:
-                states.append("cancelled")
-            case 4:
-                states.append("removed")
-            case other:
-                states.append(None)
-    return states
-
-
 def get_trainer_names(trainer_ids):
+    """
+    This function returns the trainer names using the trainer id's argument.
+    """
     if isinstance(trainer_ids, int):
         name = do_database_fetchone(f'SELECT fullname FROM users WHERE userid = {trainer_ids}')
         if name:
@@ -216,6 +204,9 @@ def get_trainer_names(trainer_ids):
 
 
 def get_skill_names(skill_ids):
+    """
+    This function returns the skill names using the skill id's argument.
+    """
     if isinstance(skill_ids, int):
         skill = do_database_fetchone(f'SELECT name FROM skill WHERE skillid = {skill_ids}')
         if skill:
@@ -230,6 +221,10 @@ def get_skill_names(skill_ids):
 
 
 def get_skillids_start_trainerids(class_ids):
+    """
+    This function returns the skill id, start date and trainer id's for
+    the given class id arguments.
+    """
     skill_ids = []
     trainer_ids = []
     start_dates = []
@@ -300,6 +295,10 @@ def handle_get_my_skills_request(iuser, imagic):
 
 
 def get_class_size_max_size_notes(class_ids):
+    """
+    This function returns the class size, max size and note for the given
+    class id argument.
+    """
     if isinstance(class_ids, int):
         note = do_database_fetchone(f'Select note From class Where classid = {class_ids}')[0]
         c_size = len(do_database_fetchall(
@@ -321,6 +320,10 @@ def get_class_size_max_size_notes(class_ids):
 
 
 def get_actions_for_upcoming(class_ids, class_sizes, iuser, max_sizes, skill_ids):
+    """
+    This function returns the 'action' variable in the class dictionary for
+    the upcoming training page.
+    """
     actions = ['join' for _ in range(len(class_ids))]
     for i, id in enumerate(class_ids):
         user_status = do_database_fetchall(f'Select status From attendee Where userid = {iuser} And classid = {id}')
