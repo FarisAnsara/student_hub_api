@@ -166,7 +166,7 @@ def handle_login_request(iuser, imagic, content):
     imagic = random_digits(10)
     do_database_execute(f'DELETE FROM session WHERE userid = "{iuser}"')
     do_database_execute(f'INSERT INTO session (userid, magic) VALUES ({iuser},{imagic})')
-    response.append({"type": "redirect", "where": "\index.html"})
+    response.append({"type": "redirect", "where": "/index.html"})
     return [iuser, imagic, response]
 
 
@@ -465,7 +465,22 @@ def handle_join_class_request(iuser, imagic, content):
     if not check_session:
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
-    class_id = content['id']
+
+    try:
+        class_id = content['id']
+    except Exception as e:
+        response.append(build_response_message(129, 'Cannot join class: Please provide class id'))
+        return [iuser, imagic, response]
+
+    if not class_id:
+        response.append(build_response_message(128, 'Cannot join class: Please provide class id'))
+        return [iuser, imagic, response]
+
+    class_id_in_database = do_database_fetchone(f'Select * From class Where classid = {class_id}')
+    if not class_id_in_database:
+        response.append(build_response_message(220, 'Cannot join class: Class does not exist'))
+        return [iuser, imagic, response]
+
     skill_id, start_date, trainer_id = get_skillids_start_trainerids(class_id)
     skill_name = get_skill_names(skill_id)
     trainer_name = get_trainer_names(trainer_id)
@@ -529,7 +544,17 @@ def handle_leave_class_request(iuser, imagic, content):
     if not check_session:
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
-    class_id = content['id']
+
+    try:
+        class_id = content['id']
+    except Exception as e:
+        response.append(build_response_message(139, 'Cannot leave class: Please provide class id'))
+        return [iuser, imagic, response]
+
+    if not class_id:
+        response.append(build_response_message(138, 'Cannot leave class: Please provide class id'))
+        return [iuser, imagic, response]
+
     skill_id, start_date, trainer_id = get_skillids_start_trainerids(class_id)
     skill_name = get_skill_names(skill_id)
     trainer_name = get_trainer_names(trainer_id)
@@ -571,11 +596,24 @@ def handle_cancel_class_request(iuser, imagic, content):
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
 
-    class_id = content['id']
+    try:
+        class_id = content['id']
+    except Exception as e:
+        response.append(build_response_message(148, 'Cannot cancel class: Invalid class id'))
+        return [iuser, imagic, response]
+
+    if not class_id:
+        response.append(build_response_message(148, 'Cannot cancel class: Invalid class id'))
+        return [iuser, imagic, response]
+
     skill_id, start_date, trainer_id = get_skillids_start_trainerids(class_id)
     if str(iuser) != str(trainer_id):
         response.append(build_response_message(240,
                                                'Cannot cancel class: User has to be the registered trainer in order to cancel a class'))
+        return [iuser, imagic, response]
+
+    if start_date < int(time.time()):
+        response.append(build_response_message(249, 'Cannot cancel class: Class has already started'))
         return [iuser, imagic, response]
 
     do_database_execute(f'Update class Set max = 0 Where classid = {class_id}')
@@ -614,9 +652,26 @@ def handle_update_attendee_request(iuser, imagic, content):
     if not check_session:
         response.append({"type": "redirect", "where": "/login.html"})
         return [iuser, imagic, response]
-
     attendee_id = content['id']
     state_input = content['state']
+
+    class_id = do_database_fetchone(f'Select classid From attendee Where attendeeid = {attendee_id}')
+    if not class_id:
+        response.append(build_response_message(259, 'Cannot update attendee: class does not exist'))
+        return [iuser, imagic, response]
+    else:
+        class_id = class_id[0]
+
+    skill_id, start_date, trainer_id = get_skillids_start_trainerids(class_id)
+    if str(iuser) != str(trainer_id):
+        response.append(build_response_message(258, 'Cannot update attendee: User is not trainer'))
+        return [iuser, imagic, response]
+
+    if start_date > int(time.time()) and state_input in ['pass', 'fail']:
+        response.append(build_response_message(257,
+                                               'Cannot update attendee: pass or fail can only be placed when class has started'))
+        return [iuser, imagic, response]
+
     attendee_user_id = do_database_fetchone(f'Select userid From attendee Where attendeeid = {attendee_id}')
     if not attendee_user_id:
         response.append(
@@ -654,19 +709,27 @@ def handle_create_class_request(iuser, imagic, content):
     """This code handles a request to create a class."""
 
     response = []
-    skill_id = content['id']
-    day = content['day']
-    month = content['month']
-    year = content['year']
-    hour = content['hour']
-    minute = content['minute']
-    note = content['note']
-    max_students = content['max']
 
-    is_trainer_for_skill = do_database_fetchone(f'Select * From trainer Where trainerid = {iuser}')
+
+    try:
+        skill_id = content['id']
+        day = content['day']
+        month = content['month']
+        year = content['year']
+        hour = content['hour']
+        minute = content['minute']
+        max_students = content['max']
+        note = content['note']
+    except Exception as e:
+        response.append(build_response_message(168, 'Cannot create class: Please provide all values'))
+        return [iuser, imagic, response]
+
+    is_trainer_for_skill = do_database_fetchone(
+        f'Select * From trainer Where trainerid = {iuser} And skillid = {skill_id}')
     if not is_trainer_for_skill:
         response.append(
             build_response_message(260, 'Cannot create class: User is not a listed trainer for this skill.'))
+        return [iuser, imagic, response]
 
     skill_name = get_skill_names(skill_id)
     if not skill_name:
@@ -696,10 +759,10 @@ def handle_create_class_request(iuser, imagic, content):
         get_primary_key=True)
     class_size = 0
 
-    response.append(
-        build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size, max_students, 'edit'))
-    response.append(build_response_redirect(f"/class/{class_id}"))
-    response.append(build_response_message(0, "Successfully created class."))
+    #     response.append(
+    #         build_response_class(class_id, skill_name, trainer_name, start_date, note, class_size, max_students, 'edit'))
+    #     response.append(build_response_message(0, "Successfully created class."))
+    response.append(build_response_redirect(f'/class/{class_id}'))
     return [iuser, imagic, response]
 
 
