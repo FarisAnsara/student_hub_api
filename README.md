@@ -49,9 +49,6 @@ This is a RESTful API developed to manage student-related information and operat
 - **GET /enrollments**: Retrieve a list of all enrollments.
 - **DELETE /enrollments/:id**: Unenroll a student from a course.
 
-## Contributing
-Contributions are welcome! Please fork this repository and submit a pull request for any enhancements or bug fixes.
-
 ## License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
 
